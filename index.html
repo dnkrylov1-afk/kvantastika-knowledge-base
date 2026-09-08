@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>База знаний преподавателя — Квантастика</title>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --primary: #4A2E9E;
+      --primary-soft: #6B4FC4;
+      --primary-light: #8F7AD6;
+      --primary-pale: #EDE8F8;
+      --primary-dark: #2E1B6E;
+      --bg: #F7F5FC;
+      --white: #FFFFFF;
+      --text: #2D2D3A;
+      --text-light: #7A7A8E;
+      --sidebar-width: 280px;
+      --radius: 16px;
+      --shadow: 0 4px 24px rgba(74, 46, 158, 0.10);
+      --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ---------- ЭКРАН ВХОДА ---------- */
+    .login-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(160deg, #D5CCF0, #EDE8F8, #F7F5FC);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: opacity 0.4s ease;
+    }
+    .login-overlay.hidden { opacity: 0; pointer-events: none; }
+    .login-box {
+      background: var(--white);
+      border-radius: 20px;
+      padding: 40px;
+      width: 400px;
+      box-shadow: 0 12px 48px rgba(74, 46, 158, 0.15);
+      text-align: center;
+    }
+    .login-box h2 {
+      font-size: 26px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #2E1B6E, #4A2E9E, #6B4FC4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 700;
+    }
+    .login-box p { color: var(--text-light); margin-bottom: 24px; font-size: 14px; }
+    .login-input {
+      width: 100%;
+      padding: 14px 18px;
+      border: 1.5px solid #D5CCF0;
+      border-radius: 12px;
+      font-size: 16px;
+      outline: none;
+      margin-bottom: 16px;
+      text-align: center;
+      letter-spacing: 1px;
+      transition: border 0.25s, box-shadow 0.25s;
+      background: var(--bg);
+    }
+    .login-input:focus { border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(74, 46, 158, 0.08); }
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #4A2E9E, #6B4FC4);
+      color: var(--white);
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.25s;
+    }
+    .login-btn:hover { opacity: 0.88; }
+    .login-error { color: #C46B6B; font-size: 13px; margin-top: 12px; display: none; }
+
+    /* ---------- САЙДБАР ---------- */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: linear-gradient(180deg, #EDE8F8, #F7F5FC);
+      color: var(--text);
+      padding: 28px 14px 40px;
+      overflow-y: auto;
+      position: fixed;
+      top: 0; bottom: 0; left: 0;
+      z-index: 100;
+      border-right: 1px solid #D5CCF0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary-light) transparent;
+    }
+    .sidebar-title {
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      padding: 0 10px;
+      background: linear-gradient(135deg, #2E1B6E, #4A2E9E, #6B4FC4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .sidebar-subtitle {
+      font-size: 12px;
+      color: var(--text-light);
+      margin-bottom: 18px;
+      padding: 0 10px;
+    }
+    .role-badge {
+      display: inline-block;
+      background: var(--primary-pale);
+      color: var(--primary-dark);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      margin: 0 10px 14px;
+      font-weight: 600;
+    }
+    .role-badge.admin { background: var(--primary-light); color: var(--white); font-weight: 700; }
+    .logout-btn {
+      display: block;
+      width: calc(100% - 20px);
+      margin: 0 10px 20px;
+      padding: 8px;
+      background: transparent;
+      border: 1px solid var(--primary-light);
+      color: var(--primary-dark);
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.25s;
+    }
+    .logout-btn:hover { background: var(--primary-pale); }
+
+    /* ---------- ВКЛАДКИ (АККОРДЕОН) ---------- */
+    .menu-section { margin-bottom: 6px; }
+    .menu-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--primary-dark);
+      cursor: pointer;
+      border-radius: 10px;
+      transition: background 0.2s;
+      user-select: none;
+    }
+    .menu-section-header:hover { background: var(--primary-pale); }
+    .menu-section-header .arrow {
+      transition: transform 0.3s ease;
+      font-size: 11px;
+      color: var(--primary-light);
+    }
+    .menu-section.open .menu-section-header .arrow { transform: rotate(90deg); }
+    .menu-section-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease;
+    }
+    .menu-section.open .menu-section-content { max-height: 3000px; }
+    .menu-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      padding: 7px 14px 7px 22px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      text-decoration: none;
+    }
+    .menu-item:hover { background: var(--primary-pale); color: var(--primary-dark); }
+    .menu-item.active {
+      background: var(--primary-light);
+      color: var(--white);
+      font-weight: 600;
+    }
+    .menu-item.sub { padding-left: 30px; }
+
+    /* ---------- ГЛАВНАЯ СТРАНИЦА (ЦЕНТР, КАК GOOGLE) ---------- */
+    .home-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      text-align: center;
+    }
+    .home-hero h1 {
+      font-size: 34px;
+      font-weight: 700;
+      margin-bottom: 36px;
+      background: linear-gradient(135deg, #2E1B6E, #4A2E9E, #6B4FC4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .home-hero .search-container {
+      width: 100%;
+      max-width: 680px;
+      margin: 0 auto;
+      position: relative;
+    }
+    .search-input {
+      width: 100%;
+      padding: 18px 28px;
+      border: 1px solid #D5CCF0;
+      border-radius: 28px;
+      font-size: 16px;
+      outline: none;
+      transition: box-shadow 0.25s, border-color 0.25s;
+      background: var(--white);
+      text-align: left;
+      box-shadow: 0 2px 12px rgba(74, 46, 158, 0.08);
+    }
+    .search-input:focus { border-color: var(--primary-light); box-shadow: 0 4px 20px rgba(74, 46, 158, 0.15); }
+    .search-input::placeholder { color: var(--text-light); }
+    .search-suggestions {
+      list-style: none;
+      background: var(--white);
+      border: 1px solid #D5CCF0;
+      border-radius: 16px;
+      margin-top: 8px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(74, 46, 158, 0.15);
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .search-suggestions li {
+      padding: 12px 24px;
+      cursor: pointer;
+      font-size: 14px;
+      border-bottom: 1px solid var(--primary-pale);
+      transition: background 0.15s;
+      text-align: left;
+    }
+    .search-suggestions li:hover { background: var(--primary-pale); }
+
+    /* ---------- ОСНОВНОЙ КОНТЕНТ ---------- */
+    .main {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      padding: 48px 48px 80px;
+      max-width: 1200px;
+    }
+    .page-title {
+      font-size: 26px;
+      margin-bottom: 18px;
+      font-weight: 700;
+      color: var(--primary-dark);
+    }
+    .content-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      transition: box-shadow 0.3s;
+    }
+    .content-card:hover { box-shadow: 0 6px 32px rgba(74, 46, 158, 0.14); }
+    .content-card h3 { color: var(--primary-dark); margin-bottom: 12px; font-size: 19px; }
+    .content-card h4 { color: var(--primary-dark); margin: 16px 0 8px; font-size: 16px; }
+    .content-card p, .content-card li { font-size: 14.5px; margin-bottom: 8px; color: var(--text); }
+    .content-card ul, .content-card ol { padding-left: 22px; margin-bottom: 12px; }
+    .btn {
+      display: inline-block;
+      background: var(--primary-pale);
+      color: var(--primary-dark);
+      border: none;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 13.5px;
+      cursor: pointer;
+      text-decoration: none;
+      margin: 4px 8px 4px 0;
+      transition: background 0.25s;
+    }
+    .btn:hover { background: var(--primary-light); color: var(--white); }
+    .template-box {
+      background: var(--primary-pale);
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin: 10px 0;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+    .constructor-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .constructor-row select {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1.5px solid #D5CCF0;
+      font-size: 13.5px;
+      min-width: 200px;
+      background: var(--white);
+      transition: border 0.25s;
+    }
+    .constructor-row select:focus { border-color: var(--primary-light); outline: none; }
+    .copy-btn {
+      background: var(--primary);
+      color: var(--white);
+      border: none;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12.5px;
+      margin-top: 8px;
+      transition: background 0.25s;
+    }
+    .copy-btn:hover { background: var(--primary-dark); }
+
+    /* ---------- РЕЖИМ РЕДАКТИРОВАНИЯ ---------- */
+    .edit-mode .content-card {
+      outline: 2px dashed var(--primary-light);
+      outline-offset: -2px;
+      cursor: text;
+      min-height: 50px;
+    }
+    .edit-mode .content-card:focus {
+      outline: 2px solid var(--primary);
+      background: #FBFAFE;
+    }
+    .edit-toolbar {
+      display: none;
+      gap: 10px;
+      margin-bottom: 20px;
+      align-items: center;
+      justify-content: center;
+    }
+    .edit-toolbar.visible { display: flex; }
+    .edit-toolbar button {
+      background: var(--primary-pale);
+      color: var(--primary-dark);
+      border: none;
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.25s;
+    }
+    .edit-toolbar button:hover { background: var(--primary-light); color: var(--white); }
+    .save-btn {
+      background: #7DB87A;
+      color: var(--white);
+      border: none;
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.25s;
+    }
+    .save-btn:hover { background: #5A9E56; }
+    .edit-status { font-size: 12.5px; color: var(--text-light); }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; padding: 24px 20px 60px; }
+      .home-hero h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ЭКРАН ВХОДА (виден при загрузке) -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-box">
+      <h2>База знаний Квантастика</h2>
+      <p>Введите код доступа</p>
+      <input type="password" id="login-input" class="login-input" placeholder="Код доступа" autocomplete="off">
+      <button id="login-btn" class="login-btn">Войти</button>
+      <p id="login-error" class="login-error">Неверный код доступа</p>
+    </div>
+  </div>
+
+  <!-- САЙДБАР -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-title">База знаний</div>
+    <div class="sidebar-subtitle">Квантастика</div>
+    <div id="role-badge" class="role-badge">Преподаватель</div>
+    <button id="logout-btn" class="logout-btn">Выйти</button>
+
+    <div class="menu-section open">
+      <div class="menu-section-header">Общая информация <span class="arrow">›</span></div>
+      <div class="menu-section-content">
+        <button class="menu-item active" data-page="home">Главная</button>
+        <button class="menu-item" data-page="new-employee">Новым сотрудникам</button>
+        <button class="menu-item" data-page="checklist">Чек-лист преподавателя</button>
+        <button class="menu-item" data-page="otrabotka">Как назначить отработку</button>
+        <button class="menu-item" data-page="tech-help">Как назначить техпомощь</button>
+        <button class="menu-item" data-page="templates">Шаблонные сообщения</button>
+        <button class="menu-item" data-page="leave">Отгулы/замены/отпуска</button>
+        <button class="menu-item" data-page="video-lesson">Где взять видеоролик</button>
+        <button class="menu-item" data-page="links">Полезные ссылки</button>
+        <button class="menu-item" data-page="regulations">Регламенты преподавателя</button>
+        <button class="menu-item" data-page="strong">Сильные ученики</button>
+        <button class="menu-item" data-page="weak">Слабые ученики</button>
+        <button class="menu-item" data-page="problem">Проблемные ученики</button>
+        <button class="menu-item" data-page="noisy">Шумные ученики</button>
+        <button class="menu-item" data-page="quiet">Тихие ученики</button>
+        <button class="menu-item" data-page="group">Групповые уроки</button>
+        <button class="menu-item" data-page="motivation">Мотивация</button>
+        <button class="menu-item" data-page="feedback">Обратная связь</button>
+        <button class="menu-item" data-page="late">Ученик опоздал</button>
+        <button class="menu-item" data-page="ignore">Игнорирует преподавателя</button>
+        <button class="menu-item" data-page="mixed-levels">Разные уровни</button>
+        <button class="menu-item" data-page="attention">Управление вниманием</button>
+        <button class="menu-item" data-page="crying">Ребёнок заплакал</button>
+      </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-section-header">Инструкции по установке <span class="arrow">›</span></div>
+      <div class="menu-section-content">
+        <button class="menu-item sub" data-page="install-minecraft">Minecraft</button>
+        <button class="menu-item sub" data-page="install-worldedit">WorldEdit</button>
+        <button class="menu-item sub" data-page="install-tinkercad">Tinkercad</button>
+        <button class="menu-item sub" data-page="install-scratch">Scratch</button>
+        <button class="menu-item sub" data-page="install-appinventor">App Inventor</button>
+        <button class="menu-item sub" data-page="install-roblox">Roblox Studio</button>
+        <button class="menu-item sub" data-page="install-kodu">Kodu Game Lab</button>
+        <button class="menu-item sub" data-page="install-unity">Unity</button>
+        <button class="menu-item sub" data-page="install-blender">Blender</button>
+        <button class="menu-item sub" data-page="install-unreal">Unreal Engine</button>
+        <button class="menu-item sub" data-page="install-godot">Godot</button>
+        <button class="menu-item sub" data-page="install-python">Python</button>
+        <button class="menu-item sub" data-page="install-vscode">VS Code</button>
+        <button class="menu-item sub" data-page="install-stencyl">Stencyl</button>
+        <button class="menu-item sub" data-page="install-java">Java</button>
+      </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-section-header">Технические проблемы <span class="arrow">›</span></div>
+      <div class="menu-section-content">
+        <button class="menu-item sub" data-page="tech-scratch">Scratch</button>
+        <button class="menu-item sub" data-page="tech-minecraft">Minecraft</button>
+        <button class="menu-item sub" data-page="tech-appinventor">App Inventor</button>
+        <button class="menu-item sub" data-page="tech-stencyl">Stencyl</button>
+        <button class="menu-item sub" data-page="tech-godot">Godot</button>
+        <button class="menu-item sub" data-page="tech-unity">Unity</button>
+        <button class="menu-item sub" data-page="tech-blender">Blender</button>
+        <button class="menu-item sub" data-page="tech-unreal">Unreal Engine</button>
+        <button class="menu-item sub" data-page="tech-python">Python</button>
+        <button class="menu-item sub" data-page="tech-neural">Нейросети</button>
+        <button class="menu-item sub" data-page="tech-lk">Личный кабинет</button>
+        <button class="menu-item sub" data-page="tech-kontur">Контур Толк</button>
+      </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-section-header">Дообучение <span class="arrow">›</span></div>
+      <div class="menu-section-content">
+        <button class="menu-item sub" data-page="training">В разработке</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ -->
+  <main class="main" id="main-content">
+    <div class="edit-toolbar" id="edit-toolbar">
+      <button id="toggle-edit">Редактировать</button>
+      <button id="save-changes" class="save-btn">Сохранить</button>
+      <span class="edit-status" id="edit-status"></span>
+    </div>
+    <div id="page-root"></div>
+  </main>
+
+  <!-- Подключение данных -->
+  <script src="data-templates.js"></script>
+  <script src="data-install.js"></script>
+  <script src="data-tech.js"></script>
+
+  <script>
+    // ===== КОНФИГУРАЦИЯ FIREBASE — ЗАМЕНИТЕ НА СВОИ ДАННЫЕ =====
+   const firebaseConfig = { 
+  apiKey : "AIzaSyDgtXnDHiq5HACZBgsudodKoa6RzH40eII" , 
+  authDomain : "kvantastika-knowledge-base.firebaseapp.com" , 
+  projectId : "квантастика-база знаний" , 
+  storageBucket : "kvantastika-knowledge-base.firebasestorage.app" , 
+  messagingSenderId : "587274017457" , 
+  appId : "1:587274017457:web:ba38be16c245c4c8686090" , 
+  measurementId : "G-HVKWRMML40" 
+};
+    // ========================================================
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    (function() {
+      const SIDEBAR = document.getElementById('sidebar');
+      const ROOT = document.getElementById('page-root');
+      const LOGIN_OVERLAY = document.getElementById('login-overlay');
+      const LOGIN_INPUT = document.getElementById('login-input');
+      const LOGIN_BTN = document.getElementById('login-btn');
+      const LOGIN_ERROR = document.getElementById('login-error');
+      const ROLE_BADGE = document.getElementById('role-badge');
+      const LOGOUT_BTN = document.getElementById('logout-btn');
+      const EDIT_TOOLBAR = document.getElementById('edit-toolbar');
+      const TOGGLE_EDIT = document.getElementById('toggle-edit');
+      const SAVE_CHANGES = document.getElementById('save-changes');
+      const EDIT_STATUS = document.getElementById('edit-status');
+
+      const ACCESS_CODES = {
+        'qWanTas2742!': 'teacher',
+        'qWanTas274209!': 'admin'
+      };
+
+      let currentRole = null;
+      let isEditMode = false;
+      let currentPageId = 'home';
+
+      // ===== АККОРДЕОН В САЙДБАРЕ =====
+      document.querySelectorAll('.menu-section-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const section = header.parentElement;
+          section.classList.toggle('open');
+        });
+      });
+
+      // ===== БАЗОВЫЕ СТРАНИЦЫ (Общая информация) =====
+      const generalPages = {
+        'home': { title: '', html: `
+          <div class="home-hero">
+            <h1>База знаний школы программирования Квантастика</h1>
+            <div class="search-container">
+              <input type="text" id="global-search" class="search-input" placeholder="Поиск по базе знаний">
+              <ul class="search-suggestions hidden" id="suggestions"></ul>
+            </div>
+          </div>` },
+        'new-employee': { title: 'Новым сотрудникам', html: `<div class="content-card" data-editable="true"><h3>Первые шаги</h3><p>Изучите регламент, чек-лист преподавателя и полезные ссылки. Если останутся вопросы — обратитесь к старшему преподавателю.</p></div>` },
+        'checklist': { title: 'Чек-лист преподавателя', html: `<div class="content-card" data-editable="true"><h3>Чек-лист преподавателя</h3><p>Этот чек-лист поможет вам организовать свою работу и ничего не забыть. Он разбит на три логических блока: подготовка перед уроком, действия во время урока и завершающие шаги после урока. Регулярное использование чек-листа повысит качество ваших занятий и поможет избежать типичных ошибок.</p><h4>Перед уроком (за 15-30 минут)</h4><ul><li>Проверьте расписание в Alfa CRM — убедитесь, что у вас нет ошибок в дате и времени урока. Проверьте состав группы и ФИО учеников.</li><li>Подготовьте методические материалы — откройте презентацию, методичку и дополнительные задания. Убедитесь, что все файлы доступны и работают.</li><li>Проверьте работоспособность программ — запустите нужные программы (Scratch, Unity, Stencyl и т.д.) и убедитесь, что они работают без ошибок.</li><li>Зайдите в Alfa CRM и ERP систему — проверьте, что урок отображается в системе, и что вы можете начать его вовремя.</li><li>Проверьте наличие учеников — убедитесь, что все ученики имеют доступ к платформе и программам.</li><li>Продумайте свой внешний вид и фон — для Контур.Толк важно, чтобы фон был нейтральным, а освещение — хорошим.</li><li>Напишите напоминание в чат группы ТГ — за 5-15 минут до урока отправьте сообщение о начале занятия.</li></ul><h4>Во время урока</h4><ul><li>Вовлекайте всех учеников в диалог — задавайте вопросы, просите высказывать мнения, создавайте интерактивную атмосферу.</li><li>Следите за таймингом — контролируйте, чтобы каждый этап урока укладывался в отведённое время.</li><li>Помогайте слабым ученикам — уделяйте им больше внимания, разбивайте задания на простые шаги.</li><li>Давайте дополнительные задания сильным ученикам — чтобы они не скучали, пока остальные заканчивают.</li><li>Контролируйте уровень шума — если группа становится слишком шумной, используйте сигналы тишины или сделайте паузу.</li><li>Хвалите учеников за успехи — даже маленькие достижения заслуживают похвалы. Это повышает мотивацию.</li><li>Начисляйте КодКойны — в ERP-системе отмечайте успехи учеников монетами.</li></ul><h4>После урока (в течение 30 минут)</h4><ul><li>Нажмите кнопку "Завершить урок" — в ERP-системе завершите занятие, чтобы ученики получили домашнее задание.</li><li>Заполните отчет в Alfa CRM — укажите тему урока, присутствующих, выполненные задания и заметки.</li><li>Отправьте обратную связь родителям — в Telegram напишите краткий отчёт о том, что было на уроке и как ученик справился.</li><li>Проверьте домашние задания — если были заданы домашние работы, проверьте их и дайте обратную связь.</li><li>Назначьте отработки — если ученик пропустил урок или не справился с материалом, запишите его на отработку.</li><li>Запишите вопросы и сложности — если возникли проблемы с материалами или программами, запишите их для обсуждения с руководителем.</li></ul><h4>Тайминг уроков</h4><ul><li>Индивидуальный/нулевой урок — 60 минут.</li><li>Групповой урок (2+ детей) — 90 минут.</li><li>Групповой урок (1 ученик) — 60 минут.</li><li>Отработка — 30 минут.</li></ul></div>` },
+        'otrabotka': { title: 'Как назначить отработку', html: `<div class="content-card" data-editable="true"><h3>Как назначить отработку</h3><p>Перед тем, как назначить отработку предложите ученику/родителю попробовать самостоятельно изучить материал через видеоролик. Если у него останутся вопросы или что-то не будет получаться, то назначьте ему отработку.</p><h4>Пошаговый алгоритм действий:</h4><ol><li>Договориться с родителем/учеником на нужное время и дату. Дата и время должны быть в свободный ваш слот, который будет удобен и вам и клиенту. Не забудьте поставить в расписании занятый слот.</li><li>Заполнить таблицу назначение отработок. <a href="https://docs.google.com/spreadsheets/d/1xz81gD8lKhn-ff2ToQuxosLcp84uU0-wIIaUiQo9_dc/edit?gid=753184110#gid=753184110" target="_blank">Таблица</a></li><li>Написать в чат битрикса «педагоги и админы», номер строки которую вы заполнили в таблице отработок. И попросить добавить нужно строчку в ЕРП систему.</li><li>В альфу вы добавляете самостоятельно нужную отработку. Для этого вы нажимаете на вкладку «Уроки», далее слева сверху нажимаете на кнопку «Добавить». Выбираете «Отработку».</li><li>Укажите: дату, время, время урока 30 минут, ФИ ученика.</li></ol></div>` },
+        'tech-help': { title: 'Как назначить техническую помощь', html: `<div class="content-card" data-editable="true"><h3>Как назначить техническую помощь ученику</h3><ol><li>Зайдите в реестр технической помощи для учеников и заполните заявку по форме. <a href="https://docs.google.com/spreadsheets/d/18wsaUhfDwnM3hzfBxnNcz4iqgz-QmS5u86NPgZOc_io/edit?gid=1094725855#gid=1094725855" target="_blank">Реестр</a></li><li>Напишите в чат битрикса педагоги и админы, о том что вы заполнили реестр.</li></ol><p>Важный момент: чем подробнее вы опишите проблему и то как вы попытались помочь тем лучше. Также пропишите, когда следующий урок с учеником, чтобы до урока специалисты могли ему помочь.</p></div>` },
+        'templates': { title: 'Шаблонные сообщения', html: `<div class="content-card"><h3>Конструктор шаблонных сообщений</h3><div class="constructor-row"><select id="course-select"><option value="">— Курс —</option><option>Junior</option><option>Middle</option><option>High</option><option>Нейросети</option><option>Графический дизайн</option></select><select id="module-select" disabled><option value="">— Модуль —</option></select><select id="lesson-select" disabled><option value="">— Урок —</option></select></div><div id="template-output" class="template-box">Выберите курс, модуль и урок</div><button id="copy-template" class="copy-btn">Скопировать текст</button></div>` },
+        'leave': { title: 'Отгулы/замены/отпуска', html: `<div class="content-card" data-editable="true"><h3>Отгулы/замены/отпуска</h3><h4>Как мне взять отгул?</h4><p>В случае любой замены, кроме форс-мажорной, заполняем форму <a href="https://forms.gle/muQCVfTbcq6fTDMn7" target="_blank">https://forms.gle/muQCVfTbcq6fTDMn7</a>. В ней есть вся нужная информация, ответы на вопросы и ссылка на регламент, с указанием всех сроков и дедлайнов. Перед отправкой внимательно читаем и смотрим свое количество доступных дней отгулов/отпуска самостоятельно.</p><h4>Не могу прямо сейчас, до урока осталось меньше часа выйти на урок (форс-мажор), что делать?</h4><p>СРОЧНО написать администраторам в Telegram и в чат Битрикс "ПЕДАГОГИ и АДМИНЫ". И написать своему старшему преподавателю.</p></div>` },
+        'video-lesson': { title: 'Где взять запись/видеоролик по уроку', html: `<div class="content-card" data-editable="true"><h3>Где найти запись урока</h3><p>Если вы заходите в личный кабинет через сайт «Квантастика», следуйте пункту 1. Если вы заходите в личный кабинет через сайт «КодКласс», лучше перейдите на сайт «Квантастика» или следуйте пункту 2.</p><h4>Пункт 1</h4><p>Личный кабинет: <a href="https://lk.kvantastica.ru/login" target="_blank">https://lk.kvantastica.ru/login</a><br>Перейдите в раздел «Домашнее задание» → откройте задание к последнему уроку → перейдите на вкладку «Материалы урока» → Видео урок.</p><h4>Пункт 2</h4><p>Личный кабинет: <a href="https://erp.code-class.ru/login" target="_blank">https://erp.code-class.ru/login</a><br>Перейдите в раздел «Домашнее задание» → откройте задание к последнему уроку → прокрутите до конца страницы → Видео урок.</p><p>Если у вас нет видеоурока в личном кабинете, напишите мне</p></div>` },
+        'links': { title: 'Полезные ссылки', html: `<div class="content-card" data-editable="true"><h3>Полезные ссылки</h3><ol><li>ERP система. <a href="https://erp.kvantastica.ru/admin/teacher-study" target="_blank">https://erp.kvantastica.ru/admin/teacher-study</a></li><li>Alfa CRM <a href="https://codeclassonline.s20.online/" target="_blank">https://codeclassonline.s20.online/</a></li><li>GetCourse для дообучения. <a href="https://codeclass.getcourse.ru/teach/control/stream/view/id/129161110" target="_blank">https://codeclass.getcourse.ru/teach/control/stream/view/id/129161110</a></li><li>Регламент. <a href="https://docs.google.com/document/d/1LT7TEvnjLeL7hSIcS8XwF9egDnijkx23/edit" target="_blank">https://docs.google.com/document/d/1LT7TEvnjLeL7hSIcS8XwF9egDnijkx23/edit</a></li><li>Реестр технической помощи ученикам. <a href="https://docs.google.com/spreadsheets/d/18wsaUhfDwnM3hzfBxnNcz4iqgz-QmS5u86NPgZOc_io/edit?gid=1094725855#gid=1094725855" target="_blank">https://docs.google.com/spreadsheets/d/18wsaUhfDwnM3hzfBxnNcz4iqgz-QmS5u86NPgZOc_io/edit</a></li><li>Реестр отработок. <a href="https://docs.google.com/spreadsheets/d/1xz81gD8lKhn-ff2ToQuxosLcp84uU0-wIIaUiQo9_dc/edit?gid=753184110#gid=753184110" target="_blank">https://docs.google.com/spreadsheets/d/1xz81gD8lKhn-ff2ToQuxosLcp84uU0-wIIaUiQo9_dc/edit</a></li><li>Форма обмена кодкоинов. <a href="https://docs.google.com/forms/d/e/1FAIpQLScNnWEfS5G9bTikWJXmaIVNwg9GTqlktpks_1hZ2iQpbJQpXw/viewform?pli=1" target="_blank">https://forms.gle</a></li><li>Форма замен. <a href="https://docs.google.com/forms/d/e/1FAIpQLSf8jhogomW09dh_9O_ZrC20HXDGgr7kmTJELM9NgMRJD3J7PA/viewform" target="_blank">https://forms.gle</a></li><li>Okdesk, для отправления дообучения. <a href="https://codeclass.okdesk.ru/" target="_blank">https://codeclass.okdesk.ru/</a></li></ol></div>` },
+        'regulations': { title: 'Регламент преподавателя', html: `<div class="content-card" data-editable="true"><h3>Регламент организации работы преподавателя программирования</h3><h4>1. Общие положения</h4><p><strong>1.1. Назначение регламента</strong><br>Регламент представляет собой свод правил и действий, благодаря которым в компании поддерживается система, компания получает прибыль, а каждый преподаватель получает достойную выплату по договору. В регламенте содержатся ответы на все популярные вопросы и инструкции для различных ситуаций.</p><p><strong>1.2. Должностной статус</strong><br>Работа преподавателя заключается в проведении нулевых уроков для детей и родителей, индивидуальных и групповых регулярных уроков, отработок, технической помощи для учеников школы Квантастика. Все уроки проходят в онлайн-формате на платформе Контур.Толк.</p><p><strong>1.3. Ключевые цели преподавателя</strong><br>Ежемесячное достижение следующих показателей:<br>1. Сохраняемость клиентов (своих учеников) — не ниже 95%;<br>2. Посещаемость занятий учениками — не ниже 90%.</p><p><strong>1.4. Непосредственный руководитель</strong><br>Руководитель отдела преподавателей – Алина Комарова.</p><h4>2. Обязанности преподавателя</h4><p><strong>2.1. В процессе обучения</strong><br>2.1.1. Обучить детей всем новым понятиям, предусмотренным каждым уроком.<br>2.1.2. Проводить каждый этап урока так, как он описан в методических указаниях к уроку.<br>2.1.3. Следить, чтобы каждый ребёнок уносил с каждого урока готовый проект, предусмотренный данным уроком.<br>2.1.4. Поддерживать дисциплину и мотивацию во время урока.<br>2.1.5. Проводить урок с включенной камерой. В случае неисправности камеры — незамедлительно сообщить старшему преподавателю.</p><p><strong>2.2. Взаимодействие с родителями и коллегами</strong><br>2.2.1. Уведомлять родителей об успехах и трудностях ребенка. После каждого урока писать сообщение в чат в Telegram/ERP системы.<br>2.2.2. Проверять «Чат преподавателей», «Канал продукта», «Команды» в мессенджере Битрикс24 и чаты в Telegram не реже одного раза в день проведения уроков.<br>2.2.3. За 5–15 минут до начала урока написать в чат группы Telegram/ERP типовое сообщение о скором начале занятия, чтобы дети готовились и ждали подключения в Контур.Толк.</p><p><strong>2.3. Соблюдение тайминга уроков</strong><br>Преподаватель строго придерживается следующего хронометража:<br>индивидуальный / нулевой урок — 60 минут;<br>групповой урок (2 и более детей) — 90 минут;<br>групповой урок (1 ученик) — 60 минут;<br>отработка — 30 минут.<br>Техническая помощь - 30 - 60 минут.</p><h4>3. Задачи преподавателя</h4><p><strong>3.1. Подготовка дома</strong><br>3.1.1. Пройти полностью урок как ученик, сделать проект по слайдам, параллельно читая методичку.<br>3.1.2. Изучить детально методические указания, быть готовым воспроизвести «смысл в смысл» скрипт урока.<br>3.1.3. Решить все задания, которые встретятся на уроке (все самостоятельные и дополнительные задания). Продумать возможные сложности, которые могут появиться у учеников во время их выполнения.<br>3.1.4. Продумать вопросы и ответы на них — предусмотреть ситуации, которые могут затормозить ход урока.<br>3.1.5. Выполнить домашнее задание, чтобы понимать цель домашней работы учеников и уметь объяснить им порядок выполнения.<br>3.1.6. Если замечены ошибки в методических указаниях или появились вопросы по уроку, написать старшему преподавателю в личные сообщения в Битрикс24.<br>3.1.7. Продумать внешний вид и фон для Контур.Толк. Внешний вид: однотонная закрытая одежда — футболка/водолазка/платье без ярких принтов. Фон спокойный однотонного цвета — который не будет отвлекать учеников на занятии. В приоритете взять фирменный фон компании.</p><p><strong>3.2. Подготовка перед уроком</strong><br>3.2.1. Открыть презентацию к уроку и вкладку с викториной MyQuiz заранее. Проверить корректность работы всех слайдов.<br>3.2.2. За 5–15 минут до начала урока написать в чат группы/клиента в Telegram/ERP напоминание о начале урока.<br>3.2.3. Перед каждым модулем отправить родителям инструкцию по установке программ, при необходимости помочь с установкой.</p><p><strong>3.3. После окончания урока</strong><br>3.3.1. Начислить КодКойны за урок каждому ученику в личном кабинете перед завершением урока.<br>3.3.2. Нажать кнопку «Завершить урок» в ERP-системе.<br>3.3.3. Отправить родителям учеников в Telegram/ERP-чат типовое сообщение по итогам урока.<br>3.3.4. Провести урок в Альфа СРМ. Все уроки, кроме отработок, технической помощи ставятся администраторами.</p><h4>4. Обучение и дообучение преподавателя</h4><p>4.1. Перед началом работы преподаватель обязан пройти обучение на GetКурсе, сдать все тесты и проекты, успешно пройти финальную аттестацию.<br>4.2. В течение 3 календарных месяцев с даты начала сотрудничества педагог обязан пройти дообучение по всем предметам: пройти урок в курсе Дообучения на GetCourse и сдать проект в OkDesk.<br>4.3. Без прохождения дообучения педагог не допускается к работе с группами. Ведение занятий без дообучения запрещено.</p><h4>5. Запрещенные действия</h4><p>Преподавателю запрещается:<br>5.1. Работать в конкурентных школах (кружках по программированию). В случае нарушения сотрудничество с данным преподавателем будет остановлено.<br>5.2. Самостоятельно проводить занятия за дополнительную плату с ребенком, который учится или учился в онлайн-школе Квантастика. В случае нарушения сотрудничество будет остановлено, штраф — подписанный в NDA при начале сотрудничества.<br>5.3. Распространять каким-либо образом методические материалы (презентации, методические материалы, материалы для распечатки).<br>5.4. Заменять другого преподавателя без предупреждения руководителя.<br>5.5. Проводить вместо одного занятия два занятия, если осталось много свободного времени, и наоборот — сокращать занятие, если пришло меньше детей или все задания выполнены быстрее.</p><h4>6. Действия при внештатных ситуациях</h4><p>6.1. При возникновении сложности входа в личный кабинет преподавателя — написать старшему педагогу. При возникновении сложности загрузки презентации — создать запрос по форме Битрикс24 в «Чат запросов методистов».<br>6.2. Если ребенок не подключился к уроку в течение 5 минут, необходимо написать в чат с родителем в Telegram и сообщить в Отдел Поддержки Клиентов.<br>6.3. В случае проблемы с ребёнком на уроке (заплакал, упал, поспорили с преподавателем и т.д.) сразу после занятия написать родителям в личные сообщения и первым рассказать об этом, объяснить сложность. При рассказе использовать принцип «сэндвича»: сперва похвалить, затем рассказать о проблеме, затем снова похвалить или закончить позитивно.</p><h4>7. Работа с расписанием</h4><p>7.1. Уроки назначает только администратор. Преподаватель назначает отработки и сразу вносит их в расписание.<br>7.2. Для назначения времени администратор заходит в Google-документ преподавателя с расписанием (выдается руководителем перед началом работы).<br>7.3. Расписание заполняется на каждые 2 месяца до 25 числа текущего месяца. Преподаватель обязательно указывает свободные слоты, открытые для записи.<br>7.4. Назначить урок на свободный слот преподавателю можно только до 21:00 предыдущего дня. Администратор выбирает преподавателя и слот, сразу заполняет его в расписании.<br>7.5. Преподаватель обязан проверять расписание ежедневно.<br>7.6. Преподаватель имеет право закрыть свой свободный слот, если на него еще не назначен урок — только с разрешением старшего педагога.</p><h4>8. Пропуск занятия учеником</h4><p><strong>8.1. Определение уважительной причины</strong><br>Уважительными причинами пропуска занятия признаются:<br>1. болезнь (подтвержденная справкой от врача или фото градусника/больничного листа с датой);<br>2. семейные обстоятельства (смерть родственника, экстренная госпитализация близкого родственника);<br>3. технические проблемы со стороны школы (сбой платформы, проблемы с Контур.Толк, ERP);<br>4. Отключение электроэнергии или интернета (подтвержденное справкой от провайдера или фото экрана с ошибкой подключения).<br>Иные причины рассматриваются старшим преподавателем индивидуально и не являются гарантией переноса или отработки.</p><p><strong>8.2. Индивидуальный формат</strong><br>8.2.1. Клиент предупредил за 8 часов или предоставил справку — занятие переносится.<br>8.2.2. Клиент не пришел без предупреждения или предупредил менее чем за 8 часов:<br>первый пропуск в текущем месяце — занятие не списывается, преподаватель предупреждает и напоминает о правилах, занятие переносится;<br>второй и последующие пропуски в текущем месяце — занятие списывается с абонемента (сообщить старшему преподавателю).<br>8.2.3. При постоянных пропусках информация передается руководителю для индивидуального сопровождения отделом поддержки.<br>8.2.4. При отсутствии ученика на индивидуальном уроке преподаватель сразу пишет в Telegram-чат родителям, сообщает администраторам, ждет 15 минут и отключается. Если клиент обещал подключиться, но не пришел, и ожидание составило более 15 минут — сообщить администраторам, что вы отключаетесь и оставить комментарий в Альфе СРМ.</p><p><strong>8.3. Групповой формат</strong><br>8.3.1. Если ученик не пришел по уважительной причине (согласно п. 8.1) и предупредил за 8 часов / предоставил подтверждение — 1 раз в месяц ему положена бесплатная отработка с преподавателем.<br>8.3.2. Вторая отработка в месяц — платная.<br>8.3.3. Более 2 отработок в месяц не проводится.<br>8.3.4. Если уважительной причины нет, либо пропущено 2–3 занятия — напомнить о прикрепленных видео в ERP и попросить прислать скрин-подтверждение выполнения практики.</p><p><strong>8.4. Назначение отработок</strong><br>8.4.1. Преподаватель договаривается об отработке с клиентами.<br>8.4.2. Заполняет форму по ссылке: <a href="https://docs.google.com/spreadsheets/d/1xz81gD8lKhn-ff2ToQuxosLcp84uU0-wIIaUiQo9_dc/edit#gid=0" target="_blank">https://docs.google.com/spreadsheets/d/1xz81gD8lKhn-ff2ToQuxosLcp84uU0-wIIaUiQo9_dc/edit#gid=0</a><br>8.4.3. Просит администратора поставить отработку в ERP.<br>8.4.4. Вносит отработку в свое расписание и Альфа СРМ.</p><p><strong>8.5. Алгоритм при отсутствии ученика на групповом уроке</strong><br>8.5.1. Сообщить администраторам Битрикс24 в «Педагоги и админы» и вести урок.<br>8.5.2. После урока отправить видеоролик из ERP + заготовку к уроку (при наличии).<br>8.5.3. Попросить ученика подтвердить прохождение урока по видео (например, сбросить скрин кода в чат). За отработку по видео начисляется +2 КодКойна.<br>8.5.4. Если ученику положена отработка — согласовать по просьбе родителей.</p><h4>9. Технические сложности у учеников на уроке</h4><p>9.1. Если в ходе урока у ученика возникают технические проблемы (не открывается платформа, не загружается модуль, не работает оборудование, проблемы с подключением к Контур.Толк), преподаватель обязан:<br>9.1.1. Попытаться решить проблему на месте в течение урока, используя доступные инструменты (перезагрузка, проверка настроек, альтернативные ссылки).<br>9.1.2. Если проблема не решается в рамках тайминга урока, преподаватель договаривается с учеником/родителями о дополнительном времени после урока и проводит техническую помощь самостоятельно.<br>9.1.3. Если ошибка сложная и преподаватель не может ее решить самостоятельно (проблемы с установкой ПО, несовместимость оборудования, системные ошибки платформы), преподаватель обязан:<br>1. Зафиксировать проблему (скриншот, описание);<br>2. Записать ученика на техническую помощь через администраторов;<br>3. Уведомить старшего преподавателя о сложности и принятых мерах.<br>9.2. Время, затраченное на техническую помощь после урока, входит в оплачиваемые часы.</p><h4>10. Запись уроков</h4><p>10.1. Все занятия необходимо записывать от начала до конца.<br>10.2. Занятие, которое не было записано, не оплачивается.<br>10.3. Инструкции по настройке конференции и установке Контур.Толк предоставляются отдельно.</p><h4>11. Работа в ERP-системе</h4><p><strong>11.1. Предоставление материалов</strong><br>11.1.1. Руководитель создает преподавателю именной аккаунт на сайте ERP и предоставляет логин и пароль.<br>11.1.2. На сайте преподаватель получает методические материалы (презентацию, методичку и др.) к каждому уроку. Чтобы увидеть материалы, администратор должен назначить урок на аккаунт преподавателя.<br>11.1.3. При сложностях и вопросах с ERP-аккаунтом обращаться к старшему преподавателю.</p><p><strong>11.2. Работа на уроке</strong><br>11.2.1. Перед началом урока преподаватель заходит в ERP в нужный урок (он должен быть назначен на дату и время) и нажимает «Начать урок».<br>11.2.2. Преподаватель следит, чтобы ученик нажал «Приступить к уроку» и использовал ERP-систему на занятии.<br>11.2.3. Во время урока или в его конце преподаватель добавляет КодКойны ученикам.<br>11.2.4. После окончания урока необходимо нажать кнопку «Завершить урок» — только в этом случае у детей в личном кабинете отобразится домашнее задание.</p><h4>12. Чаты с родителями в Telegram/ERP</h4><p>12.1. При назначении новой группы администратор добавляет педагога в Telegram/ERP-чат группы для общения с родителями учеников.<br>12.2. Преподаватель может добавить свою информацию, продумать самопрезентацию.<br>12.3. Перед нулевым уроком шаблонное сообщение отправляется в чат ERP. Ссылка на подключение есть у клиента в ERP. Если ученик не подключился, необходимо написать ему и уточнить, а также сообщить в чат «Педагоги и админы» об отсутствии клиента.<br>12.4. Преподаватель обязан соблюдать вежливость и доброжелательность, следить за грамотностью сообщений.<br>12.5. Перед началом каждого урока (за 5–15 минут) обязательно отправлять сообщение-напоминание в Telegram/ERP-чат:<br>для групповых уроков — обязательно;<br>для индивидуальных уроков / отработок — на усмотрение: если клиенты подключились заранее, напоминание не требуется; если нет — необходимо отправить. При частых опозданиях ученика напоминание обязательно.</p><p>Пример сообщения: «Здравствуйте! Скоро начинаем! Заходите в Личный Кабинет, скачивайте заготовку, открывайте домашнее задание и подключайтесь на занятие! Всех буду ждать!» (допускается творчество, смайлы и стикеры).</p><p>Если уроки стоят вплотную, можно отправлять сообщение непосредственно перед уроком, до подключения к конференции.</p><p>12.6. После окончания каждого урока преподаватель обязан отправить обратную связь в родительский чат в течение 30 минут. Используются типовые сообщения. Сообщения обезличены и не требуют редактирования (кроме проектного урока), однако допускается и приветствуется добавление имен и фамилий учеников, отметка успехов и личная обратная связь. Допускается делить сообщение на 2 отправки.</p><h4>13. Призы за кодкойны</h4><p>13.1. Ученик в группе может запросить приз за КодКойны только спустя 6 месяцев после старта обучения (с 1-го урока в группе).<br>13.2. Ребёнок выбирает приз и сообщает преподавателю. Преподаватель заполняет форму: <a href="https://forms.gle/s7tf6fPUDnTCY5dj6" target="_blank">https://forms.gle/s7tf6fPUDnTCY5dj6</a><br>13.3. Приз отправляется в течение 2–4 недель.</p><h4>14. Проверка качества работы преподавателя</h4><p>14.1. Руководитель и старший педагог имеет право просмотреть любое занятие преподавателя для оценки качества работы.<br>14.2. Все занятия должны быть записаны от начала до конца. Занятие без записи не оплачивается.<br>14.3. После просмотра урока руководитель или старший педагог может дать преподавателю обратную связь и рекомендации по улучшению качества обучения.<br>14.4. Отчет в Альфа СРМ заполняется в день проведения занятия. При несвоевременном заполнении занятие не оплачивается.<br>14.5. Чек-лист проверки качества урока:<br>При проверке урока руководитель оценивает следующие критерии:<br>Соответствие установленному таймингу (п. 2.3).<br>Использование всех слайдов презентации и следование методическим указаниям.<br>Взаимодействие с учениками: опросы, вовлечение, ответы на вопросы.<br>Выполнение итогового проекта каждым учеником.<br>Начисление КодКойнов до завершения урока.<br>Наличие видеозаписи урока.<br>Оценка по каждому критерию фиксируется в форме обратной связи и доводится до преподавателя.</p><p>14.6. Работа с жалобами и заменами преподавателя<br>14.6.1. При поступлении обоснованной жалобы от родителей на преподавателя, старший преподаватель уведомляет преподавателя в течение 1 рабочего дня.<br>14.6.2. Проводится внеочередная проверка качества согласно чек-листу (п. 14.5).<br>14.6.3. При подтверждении жалобы преподаватель получает предупреждение и индивидуальный план исправления с указанием сроков.<br>14.6.4. В случае повторной обоснованной жалобы в течение 2 месяцев после первого предупреждения — преподавателю устанавливается испытательный срок для исправления или сотрудничество прекращается по инициативе школы.<br>14.6.5. Если родители инициируют замену преподавателя, это фиксируется как снижение показателя сохраняемости (KPI) и учитывается при расчете премиальной части.</p><h4>15. Технические сбои со стороны преподавателя</h4><p>15.1. Преподаватель обязан иметь резервное устройство (второй ноутбук, планшет или смартфон) для выхода на урок в случае технической неисправности основного оборудования.<br>15.2. В случае технической неисправности (сломался компьютер, микрофон, камера) за 5 и более минут до начала урока преподаватель обязан:<br>Выйти на урок со смартфона через приложение Контур.Толк и держать связь с учениками;<br>Уведомить старшего преподавателя и администраторов в чате «Педагоги и админы»;<br>В течение 24 часов предоставить фото или описание неисправности.<br>15.3. Отсутствие резервного устройства или отказ от выхода через смартфон при работающем интернете расценивается как неготовность к уроку и влечет штраф согласно разделу 16.2 (невыход на урок без предупреждения).</p><h4>16. Оформление, график, отгулы и отпуск</h4><p><strong>16.1. Оформление и нагрузка</strong><br>16.1.1. Оформление по самозанятости, 6% налога возмещаются.<br>16.1.2. Педагог обязан предоставить слоты для проведения уроков в количестве не менее 20 астрономических часов в неделю.</p><p><strong>16.2. Отгулы (Sick Days)</strong><br>16.2.1. За календарный год преподаватель может взять не более 6 отгулов без подтверждения документами/справками.<br>16.2.2. В месяц можно взять не более 2 отгулов.<br>16.2.3. Отгулы можно брать после 2 месяцев работы в компании.<br>16.2.4. Педагог обязан согласовать отгул с руководителем не менее чем за 3 дня до него. Руководитель оставляет за собой право не согласовать sick day.<br>16.2.5. В случае необходимости срочного отгула (без предупреждения за 3 дня) необходимо предоставить справку/документальное подтверждение (отключение интернета — справка от провайдера, отключение света — справка, болезнь — справка от врача). Педагог сообщает о необходимости замены в Отдел Поддержки Клиентов как можно раньше.<br>16.2.6. В случае отсутствия документального подтверждения или невыхода на урок без предупреждения:<br>1 раз — штраф 1 000 рублей;<br>2 раз — прекращение сотрудничества.<br>16.2.7. При необходимости взять длительный больничный, уехать в командировку на основной работе или уйти на сессию педагог предоставляет документальное подтверждение. Данные отгулы вычитаются из отпуска.</p><p><strong>16.3. Алгоритм действий при внезапной болезни преподавателя</strong><br>16.3.1. Если преподаватель заболел и не может провести занятие (за 2 и более часа до начала урока), он обязан:<br>Незамедлительно уведомить старшего преподавателя и администраторов в Битрикс24 чат «Педагоги и админы».<br>Предоставить подтверждение состояния в течение 24 часов;<br>Передать методические материалы для заменяющего преподавателя (при наличии запроса).<br>16.3.2. Если справка или подтверждение не предоставлены в течение 24 часов — применяется штраф согласно п. 16.2.6.<br>16.3.3. Школа инициирует поиск замены. Преподаватель обязан быть на связи для координации передачи материалов.</p><p><strong>16.4. Отпуск</strong><br>16.4.1. Первый перерыв в оказании услуг можно взять не раньше чем через 6 месяцев после трудоустройства.<br>16.4.2. Перерыв в оказании услуг предоставляется через каждые 6 месяцев в размере до 14 дней (по желанию, можно не брать).<br>16.4.3. Отпуск согласовывается с руководителем заранее, но не позднее 30 календарных дней до его начала. Руководитель может не согласовать отпуск, если в этот период уже запланированы отпуска других преподавателей и школа не сможет обеспечить замену.<br>16.4.4. Проверить остаток sick days и дней отпуска можно по ссылке: <a href="https://docs.google.com/spreadsheets/d/1gIplzi8aRewgfopBfVghFH1IM4YgXgV_QOIgOuqhil0/edit?gid=0#gid=0" target="_blank">https://docs.google.com/spreadsheets/d/1gIplzi8aRewgfopBfVghFH1IM4YgXgV_QOIgOuqhil0/edit</a></p><h4>17. Система депремирования штрафы</h4><p>Общее условие: на любой штраф преподаватель может подать апелляцию руководителю в течение 3 рабочих дней после назначения штрафа.</p><p><strong>17.1. Сокращение урока</strong><br>Если педагог сократил урок более чем на 10 минут:<br>1 раз — предупреждение;<br>2 раз — выплачивается 50% от стоимости урока + разговор с руководителем;<br>3 раз — урок не оплачивается, ведение занятий в школе прекращается.</p><p><strong>17.2. Отмена / перенос урока / невыход на урок</strong><br>Обязательные действия при отмене/переносе занятия по инициативе преподавателя: согласовать отгул с руководителем за 3 дня до урока; при форс-мажоре или плохом самочувствии сразу сообщить руководителю / администраторам, предоставить документальное подтверждение старшему преподавателю. Самостоятельный перенос/отмена занятий категорически запрещены.<br>Если педагог не предоставляет подтверждающий документ:<br>1 раз — штраф 1 000 рублей;<br>2 раз — прекращение сотрудничества.<br>Если педагог не выходит на урок без предупреждения:<br>1 раз — штраф 1 000 рублей;<br>2 раз — прекращение сотрудничества.</p><p><strong>17.3. Изменение расписания</strong><br>Уроки назначает только администратор. Преподаватель назначает отработки, техническую помощь и самостоятельно вносит их в расписание и Альфа СРМ. Расписание заполняется на каждые 2 месяца до 25 числа текущего месяца. В расписании указываются свободные слоты и текущие группы. Преподаватель может закрыть свой свободный слот, если там не стоит урок — по согласованию со старшим преподавателем.<br>Если слот убран, а на него уже был назначен урок: 1 раз — предупреждение; далее — штраф 500 рублей.<br>Если расписание заполнено неверно (ошибки в слотах, не поставлены группы/уроки): 1 раз в месяц — предупреждение; далее — штраф 500 рублей.<br>Отказ от нулевого урока: 1 раз — предупреждение; 2 раз — штраф 500 рублей.</p><p><strong>17.4. Опоздание на урок</strong><br>В случае опоздания более 5 минут на урок:<br>1 раз — предупреждение;<br>2 раз — штраф 500 рублей;<br>3 раз — штраф 1 000 рублей;<br>4 раз — прекращение сотрудничества.<br>Преподаватель также обязан предупредить родителей в группе и администраторов.</p><p><strong>17.5. Отказ от группы / расторжение сотрудничества</strong><br>Без серьезных причин (рассматриваются руководителем индивидуально):<br>отказ от 1 группы / индивида — штраф 2 000 рублей;<br>отказ от 3 и более групп — штраф 5 000 рублей.<br>В случае прекращения сотрудничества преподаватель обязан отработать 14 дней для распределения групп. При отказе от отработки применяются штрафы как при отказе от группы.<br>Апелляция: если у преподавателя изменились планы или жизненные обстоятельства, он решил прекратить сотрудничество или пересмотреть расписание, необходимо предупредить руководителя минимум за 2 недели для поиска замены на текущие группы. В этом случае штраф не назначается.</p><p><strong>17.6. Отчётность по уроку (Альфа СРМ)</strong><br>Отчётность заполняется в день проведения урока или до 8:00 по МСК следующего дня (руководитель и поддержка собирают данные в 8:00).<br>Отсутствие отчета / ошибки в заполнении: 1 раз в месяц — предупреждение; 2 и далее — штраф 500 рублей.<br>В случае отсутствия видеозаписи урока — урок не оплачивается.<br>Апелляция: при форс-мажоре или невозможности заполнить отчет по уважительной причине необходимо связаться с руководителем и объяснить причину. Преподавателю выделяется дополнительное время, штраф не назначается.<br>Апелляция по отсутствию видеозаписи: если запись отсутствует по технической причине (сбой платформы Контур.Толк), преподаватель обязан предоставить скриншоты экрана, сделанные в процессе урока (не менее 3: в начале, середине и конце занятия), как доказательство проведения урока. При предоставлении скриншотов урок оплачивается в полном объеме.</p><p><strong>17.7. Обратная связь по уроку (сообщения в чатах)</strong><br>По результатам ежемесячной выборочной проверки 3 случайных чатов с группами выявляется отсутствие типовых сообщений с обратной связью по окончании каждого урока:<br>первая проверка за месяц — предупреждение;<br>повторная проверка — штраф 500 рублей.<br>Апелляция: если педагог получил штраф в текущем месяце, то в следующем месяце руководитель проверяет все его группы на наличие сообщений после уроков. Если все сообщения отправлены, сумма штрафа возвращается и прибавляется к заработной плате за текущий месяц.</p><p><strong>17.8. Проведение занятий без дообучения</strong><br>Если педагог проводит занятие по модулю без прохождения дообучения и сдачи проекта в OkDesk:<br>1 раз — предупреждение;<br>далее — штраф 500 рублей за каждый модуль.<br>Апелляция: в случае замещения другого преподавателя по просьбе школы (без прохождения дообучения по данному модулю) штраф не начисляется. Если педагог проходит дообучение в течение 7 дней после назначения штрафа и сообщает об этом руководителю — штраф аннулируется.</p><p><strong>17.9. Сроки прохождения дообучения</strong><br>Все программы обучения должны быть пройдены в течение 3 календарных месяцев с даты начала сотрудничества:<br>1 раз — предупреждение;<br>далее — штраф 500 рублей за каждую просроченную неделю;<br>3 штрафа — прекращение сотрудничества.</p><p><strong>17.10. Отработка занятия</strong><br>Если ученик пропустил занятие, педагог назначает ему отработку или высылает видеоролик для отработки.<br>Если руководителю или старшему педагогу поступает жалоба от родителей или отдела поддержки о том, что педагог не отправил видео или не согласовал отработку в течение 5 дней после урока:<br>1 раз — предупреждение;<br>2 раз и далее — штраф 500 рублей.</p><p><strong>17.11. Ошибки в отчетах в Альфа СРМ (отметка присутствия)</strong><br>Важно отмечать, кто был на уроке, а кого не было. От этого зависит оплата уроков преподавателю, а также это дополнительный контроль посещаемости (вместе с ERP). Если ученика не было на уроке, преподаватель снимает галочку рядом с его ФИ, выбирает причину пропуска и пишет комментарий.<br>Если ученика не было на уроке, но в Альфа СРМ отмечено, что он был:<br>1 раз — предупреждение;<br>2 раз — штраф 500 рублей;<br>3 раз — штраф 1 000 рублей;<br>4 раз — прекращение сотрудничества.<br>Если по каким-то причинам ученик не приступил к уроку в ERP, но он был на уроке — необходимо написать руководителю. Если ученик должен быть в группе, но его нет в списке учеников в ERP — сообщить администрации в начале урока.</p><p><strong>17.12. Проведение уроков без камеры</strong><br>1 раз — предупреждение;<br>2 раз — штраф 500 рублей;<br>3 раз — штраф 1 000 рублей;<br>4 раз — прекращение сотрудничества.</p></div>` },
+        'strong': { title: 'Как работать с сильными учениками', html: `<div class="content-card" data-editable="true"><h3>Как работать с сильными учениками</h3><p><strong>Почему сильные ученики теряют интерес</strong><br>Самая частая ошибка преподавателя — дать сильному ученику задание «подождать, пока остальные закончат». Это убивает мотивацию и превращает урок в скучную обязанность. Сильный ученик начинает отвлекаться, шуметь или вообще теряет интерес к предмету. Он чувствует, что его способности недооценивают, что его время тратится впустую. Со временем у него формируется негативное отношение к занятиям: «Зачем мне стараться, если меня всё равно не замечают?»</p><p>Другая распространённая ошибка — давать сильным ученикам просто «больше заданий», но таких же однотипных. Это не развивает, а утомляет. Сильный ученик нуждается в вызове, в сложности, в возможности проявить творчество. Если этого нет, он переключается на другие занятия — рисует в тетради, смотрит в окно, общается с соседом. Урок превращается в пустую трату времени для него и источник раздражения для преподавателя.</p><p>Третья ошибка — использовать сильных учеников как «бесплатную помощь» на каждом уроке. Да, они могут помогать отстающим, но если это становится системой, они перестают развиваться сами. Они начинают чувствовать себя «вторым учителем», а не учеником. Это создаёт дисбаланс: они перестают получать новые знания, а их собственное развитие замедляется.</p><h4>Стратегия 1. Дополнительные задания, связанные с темой</h4><p>Не давайте «просто что-то поделать». Дополнительное задание должно быть логическим продолжением текущей темы. Оно должно углублять понимание, а не просто занимать время. Важно, чтобы ученик видел связь между основным заданием и дополнительным — тогда он воспринимает его как естественное развитие, а не как наказание.</p><p>Пример из Scratch: вы проходите циклы. Сильный ученик уже сделал основное задание (например, нарисовал квадрат с помощью цикла). Предложите ему:<br>Добавить в проект второй уровень с новыми условиями (например, нарисовать спираль).<br>Усложнить логику движения врагов (сделать их движение случайным).<br>Добавить счётчик очков или таймер, который реагирует на действия игрока.<br>Создать несколько уровней сложности, которые переключаются автоматически.</p><p>Пример из Unity: сильный ученик уже создал сцену с основными объектами. Предложите:<br>Добавить анимацию персонажа (бег, прыжок, повороты).<br>Настроить сложное освещение (динамические тени, точечные источники света).<br>Создать систему частиц для спецэффектов (взрывы, искры, дым).<br>Реализовать систему сохранения и загрузки прогресса.</p><p>Пример из Python: сильный ученик уже написал игру «Угадай число». Предложите:<br>Добавить новый уровень сложности (больше чисел, ограничение по времени).<br>Визуализировать данные (график попыток, статистика побед).<br>Создать графический интерфейс с помощью Pygame или Tkinter.<br>Добавить возможность игры с компьютером (ИИ).</p><h4>Стратегия 2. Сделайте их помощниками</h4><p>Сильные ученики любят чувствовать себя значимыми. Попросите их помочь отстающим ученикам — это не только займёт их, но и углубит их собственное понимание материала. Объясняя другому, человек вынужден структурировать свои знания, находить простые формулировки, видеть пробелы в своём понимании. Это один из самых эффективных способов обучения.</p><p>Важно: не делайте это наказанием. Не говорите: «Ты сделал быстрее всех, теперь помоги Васе». Спросите: «Ты не против помочь Саше разобраться с этой темой? Ты в ней очень хорошо разбираешься, и я думаю, он был бы рад твоей помощи». Сделайте это добровольным и почётным заданием.</p><p>Также можно создавать пары «сильный + слабый» на постоянной основе. Это формирует устойчивые рабочие отношения, где сильный ученик постепенно становится наставником, а слабый получает постоянную поддержку. Это особенно эффективно в группах, где ученики занимаются вместе несколько месяцев.</p><h4>Стратегия 3. Открытые вопросы и исследования</h4><p>Вместо того чтобы давать готовое задание, спросите:<br>«А что будет, если сделать иначе?»<br>«Как ты думаешь, можно ли это сделать быстрее?»<br>«Почему этот код работает именно так?»<br>«Какие ещё способы решения этой задачи ты можешь придумать?»<br>«Как бы ты объяснил эту тему пятилетнему ребёнку?»</p><p>Сильные ученики любят исследовать и экспериментировать. Дайте им такую возможность. Можно предложить им провести «исследовательский проект» по теме урока: например, исследовать, как разные алгоритмы сортировки влияют на производительность программы, или как изменение параметров в игре меняет поведение персонажа.</p><p>Такие задания не имеют единственно правильного ответа, что стимулирует творческое мышление и даёт ощущение свободы. Сильный ученик перестаёт быть «исполнителем» и становится «исследователем».</p><h4>Стратегия 4. Система бонусов и Кодкоинов</h4><p>За выполнение дополнительных заданий начисляйте Кодкоины. Это создаёт здоровую конкуренцию и мотивирует сильных учеников не останавливаться. Важно, чтобы система была прозрачной и понятной: ученик должен видеть, сколько он заработал и что может получить за свои Кодкоины.</p><p>Можно создать «доску достижений» (в классе или в чате), где отмечаются успехи сильных учеников. Это не только мотивирует их самих, но и стимулирует остальных учеников подтягиваться до их уровня. Особенно эффективно это работает в группах, где есть дух соревнования.</p><h4>Стратегия 5. Индивидуальные проекты</h4><p>Если сильный ученик хочет сделать что-то своё, позвольте ему. Дайте ему свободу выбора темы и направления. Это может быть:<br>Исследовательский проект по теме, которая его интересует.<br>Создание собственной игры с нуля.<br>Решение сложной задачи, выходящей за рамки учебной программы.<br>Разработка собственного проекта, которым он сможет поделиться с другими учениками.</p><p>Индивидуальный проект даёт сильному ученику ощущение контроля над процессом обучения. Он перестаёт быть пассивным получателем знаний и становится активным творцом. Это мощный мотивационный фактор.</p><h4>Чего делать не стоит</h4><p>Не говорите «это просто» — даже если для вас это просто, для ученика это может быть сложно. Ваша задача — поддерживать, а не обесценивать его усилия.<br>Не сравнивайте с другими — «вот Петя уже сделал, а ты всё ещё копаешься». Сравнение убивает мотивацию и создаёт напряжение. Каждый ученик развивается в своём темпе.<br>Не давайте бессмысленных заданий — «посиди и подожди» или «повтори ещё раз» — это убивает интерес. Сильный ученик должен чувствовать, что его время ценится.<br>Не останавливайте их — если ученик хочет идти дальше, не тормозите его. Если он просит дополнительные материалы или задания — дайте их. Если он хочет изучить тему глубже — поддержите его.</p><h4>Итог</h4><p>Сильный ученик — это не проблема, а возможность. Используйте их потенциал, чтобы сделать урок интереснее и динамичнее для всей группы. Дополнительные задания, роль помощника и исследовательские вопросы — вот три кита работы с сильными учениками. Помните: ваша задача — не просто дать знания, а развить в ученике страсть к обучению и желание постоянно расти.</p></div>` },
+        'weak': { title: 'Как работать со слабыми учениками', html: `<div class="content-card" data-editable="true"><h3>Как работать со слабыми учениками</h3><p><strong>Почему важно правильно работать со слабыми учениками</strong><br>Если оставить слабого ученика без внимания, он очень быстро потеряет нить урока, перестанет понимать материал и начнёт отключаться. Со временем он перестанет задавать вопросы, потому что «всё равно ничего не пойму». Его самооценка падает, и он начинает считать себя неспособным к программированию. Это создаёт замкнутый круг: чем хуже он понимает, тем меньше старается, чем меньше старается — тем хуже понимает.</p><p>Слабый ученик — это не «безнадёжный» случай. Это ученик, которому нужен другой подход. Часто слабые ученики оказываются очень способными, но им нужно больше времени, чтобы усвоить материал, или другой способ объяснения. Они могут бояться ошибиться, стесняться задавать вопросы или просто иметь другой тип мышления (визуальный, а не логический).</p><p>Ваша задача — не просто «дотянуть» слабого ученика до уровня группы, а дать ему чувство успеха. Когда слабый ученик впервые понимает тему и делает что-то самостоятельно — это одна из самых больших наград для преподавателя. Этот момент меняет отношение ученика к предмету и к себе.</p><h4>Два подхода к работе со слабыми учениками</h4><p><strong>Подход 1. Работа на общем экране</strong><br>Вы показываете каждое действие шаг за шагом, буквально ведёте ученика за руку. Этот подход работает, когда:<br>Ученик совсем новичок и ещё не знаком с интерфейсом программы.<br>Тема очень сложная и требует детального разбора.<br>В группе несколько слабых учеников, и им нужно одинаковое объяснение.</p><p>Важно: сохраняйте спокойствие и позитивный тон. Если вы покажете раздражение, ученик замкнётся и перестанет понимать. Говорите медленно, чётко, повторяйте ключевые моменты. Спрашивайте: «Все успевают?», «Кому нужно, чтобы я показал ещё раз?».</p><p><strong>Подход 2. Индивидуальная помощь за экраном</strong><br>Вы подключаетесь к экрану ученика (через Контур.Толк или другую платформу) и помогаете ему прямо в его проекте. Это эффективно, когда:<br>Ученик стесняется задавать вопросы при всех и боится показаться глупым.<br>Проблема специфическая, только у этого ученика (например, он случайно удалил важный файл или сделал нестандартную ошибку).<br>Нужно показать что-то, что не видно на общем экране (например, сложную настройку или конкретный баг).</p><p>Этот подход требует больше времени, но он наиболее эффективен для слабых учеников. Они чувствуют, что преподаватель заботится о них лично, что повышает их уверенность и мотивацию.</p><h4>Пошаговая инструкция для работы со слабым учеником</h4><p><strong>Шаг 1. Выясните, что именно он не понимает</strong><br>Не спрашивайте «ты понял?» — это закрытый вопрос, на который ученик часто отвечает «да», даже если ничего не понял. Спрашивайте «что было самым сложным?», «какой момент вызвал у тебя затруднения?», «где ты потерял нить объяснения?». Это даёт конкретный ответ и показывает, где именно проблема.</p><p><strong>Шаг 2. Разбейте задачу на микро-шаги</strong><br>Вместо «сделай игру» скажите «сначала добавь спрайта на сцену, потом напиши код для движения влево-вправо, потом добавим врага». Каждый шаг должен быть простым и понятным. Ученик должен видеть, что задача состоит из маленьких, легко выполнимых частей.</p><p><strong>Шаг 3. Покажите один шаг, дайте сделать</strong><br>Не показывайте всё сразу — ученик запутается. Покажите один шаг, убедитесь, что ученик сделал его правильно, и только потом идите дальше. Если ученик ошибается, помогите ему исправить ошибку сразу, чтобы она не накапливалась.</p><p><strong>Шаг 4. Хвалите каждый маленький шаг</strong><br>«Отлично, ты добавил спрайта!», «Здорово, у тебя получилось написать движение!», «Ты молодец, что справился с этим!» — это работает лучше, чем одна большая похвала в конце. Маленькая похвала создаёт положительное подкрепление и мотивирует двигаться дальше.</p><p><strong>Шаг 5. Повторяйте</strong><br>Будьте готовы объяснять одно и то же трижды, четырежды, пять раз. Это нормально. Слабому ученику нужно больше времени, чтобы усвоить материал. Не показывайте, что вас это раздражает — ученик должен чувствовать, что вы на его стороне.</p><p><strong>Шаг 6. Дайте время на самостоятельную практику</strong><br>После того как вы показали и объяснили, дайте ученику время попрактиковаться самостоятельно. Наблюдайте за ним, но не вмешивайтесь, пока он не попросит помощи. Это развивает самостоятельность и уверенность.</p><h4>Рекомендации по общению</h4><p>Не говорите «это просто» — для слабого ученика это не просто. Это слово обесценивает его усилия и создаёт ощущение, что он «глупый», потому что не может сделать «простое» задание.</p><p>Используйте аналогии из жизни:<br>«Координаты — это как адрес дома. X — номер улицы, Y — номер дома».<br>«Цикл — это как повторять одно и то же действие несколько раз. Например, когда ты чистишь зубы, ты делаешь одни и те же движения».<br>«Переменная — это как коробка, в которую можно положить число или текст и потом использовать».</p><p>Создайте безопасную среду — ученик должен знать, что ошибка — это нормально, это часть обучения. Говорите об этом открыто: «Я тоже иногда ошибаюсь. Давай посмотрим, что пошло не так, и исправим». Это снижает страх ошибки и стимулирует ученика пробовать новое.</p><p>Не торопите — дайте ученику время на размышление и выполнение. Если нужно, скажите: «Ничего страшного, мы подождём, пока ты сделаешь. Я знаю, что у тебя получится».</p><p>Не делайте это публичным — если ученик не понимает, не обсуждайте это при всей группе. Помогите в личном чате или после урока. Публичная критика унижает и демотивирует.</p><h4>Итог</h4><p>Слабый ученик требует больше времени и внимания, но результат стоит того. Когда он наконец понимает тему и делает что-то самостоятельно — это одна из самых больших наград для преподавателя. Терпение, пошаговость и позитивный настрой — ключи к успеху. Помните: ваша задача — не просто научить, а дать ученику веру в свои силы.</p></div>` },
+        'problem': { title: 'Как работать с проблемными учениками', html: `<div class="content-card" data-editable="true"><h3>Как работать с проблемными учениками</h3><p><strong>Причины проблемного поведения</strong><br>Прежде чем реагировать, попробуйте понять причину. Проблемное поведение — это всегда сигнал о чём-то, что происходит не так. Вот основные причины:</p><p>Ученику скучно — он уже знает материал, ему неинтересно. Это особенно часто встречается у сильных учеников, которым не дают дополнительных заданий. Они начинают отвлекаться, шуметь, мешать другим, потому что не видят смысла в том, что происходит на уроке.</p><p>Ученик не понимает — и притворяется, что ему всё равно, чтобы не выглядеть глупым. Это защитный механизм. Вместо того чтобы признать, что он ничего не понимает, ученик начинает хулиганить или отвлекаться. Ему легче выглядеть «плохим», чем «глупым».</p><p>Ученик привлекает внимание — ему не хватает внимания дома или в школе. Он пытается компенсировать это, провоцируя преподавателя. Для него негативное внимание лучше, чем никакого.</p><p>Ученик проверяет границы — хочет понять, что можно и что нельзя. Это особенно характерно для подростков, которые тестируют авторитет преподавателя. Они проверяют, как далеко можно зайти и что будет, если нарушить правила.</p><p>У ученика личные проблемы — трудности дома, в школе, с друзьями. Он приносит свои проблемы на урок и не может сосредоточиться. Его поведение — это крик о помощи, но он не умеет попросить о ней иначе.</p><h4>Стратегия 1. Сохраняйте спокойствие</h4><p>Самое важное правило: эмоции только усугубят ситуацию. Если вы покажете злость или раздражение, ученик получит то, что хотел — вашу реакцию. Сделайте паузу, глубоко вдохните, говорите спокойно и ровно. Ваш спокойный тон показывает, что вы контролируете ситуацию и не поддаётесь на провокации.</p><p>Если вы чувствуете, что теряете контроль, сделайте небольшую паузу в уроке. Скажите: «Давайте сделаем паузу на минуту». Это даст вам время успокоиться и подумать, как лучше реагировать. Иногда просто промолчать и посмотреть на ученика — достаточно, чтобы он остановился.</p><h4>Стратегия 2. Чёткие правила</h4><p>В начале урока напомните правила: «Мы работаем тихо, не мешаем другим, выполняем задания. Если есть вопросы — поднимаем руку». Правила должны быть понятными и едиными для всех. Если правило нарушается, мягко напомните о нём без лишних эмоций.</p><p>Правила должны быть позитивными, а не негативными. Вместо «не шумите» скажите «работаем тихо». Вместо «не отвлекайтесь» скажите «сосредоточьтесь на задании». Позитивные формулировки лучше воспринимаются детьми.</p><h4>Стратегия 3. Отделяйте поведение от личности</h4><p>Никогда не говорите «ты плохой». Говорите «сейчас ты мешаешь уроку» или «твоё поведение отвлекает других». Это помогает ученику не чувствовать себя «плохим человеком», а понимать, что проблема в конкретном действии. Важно: критикуйте действие, а не личность.</p><p>Например, вместо «ты очень шумный и неуправляемый» скажите «сейчас ты разговариваешь слишком громко, и это мешает остальным». Так ученик понимает, что от него требуется — говорить тише, а не «быть другим».</p><h4>Стратегия 4. Давайте выбор</h4><p>Вместо «прекрати шуметь» скажите: «Ты можешь работать самостоятельно или с моей помощью. Что выбираешь?». Это даёт ученику чувство контроля и снижает сопротивление. Когда у человека есть выбор, он менее склонен к конфликту. Он чувствует, что его мнение учитывается.</p><p>Можно давать выбор и в других ситуациях: «Ты хочешь делать это задание сейчас или через 5 минут?», «Ты хочешь работать в паре или один?». Важно, чтобы выбор был реальным и ограниченным — не давайте слишком много вариантов, чтобы не создавать хаос.</p><h4>Стратегия 5. Используйте паузы</h4><p>Если ученик шумит, просто замолчите и посмотрите на него. Часто этого достаточно — ученик чувствует внимание и замолкает. Пауза создаёт напряжение, которое останавливает шум. Это работает, потому что дети не любят тишину и непонимание.</p><p>Можно также использовать «сигнал тишины» — поднятая рука, хлопок в ладоши, звонок. Ученики быстро привыкают к сигналу и реагируют на него автоматически.</p><h4>Стратегия 6. Обсуждайте проблемы наедине</h4><p>Никогда не выясняйте отношения при всей группе. Это унижает ученика и провоцирует дальнейшее сопротивление. После урока или в личном чате скажите: «Я заметил, что на уроке ты вёл себя не так, как обычно. Что случилось? Может быть, я могу тебе помочь?».</p><p>Важно: говорите не с обвинением, а с заботой. Покажите, что вы действительно хотите помочь, а не наказать. Задавайте открытые вопросы: «Что происходит?», «Как я могу тебе помочь?», «Что мы можем сделать, чтобы урок стал для тебя интереснее?».</p><h4>Стратегия 7. Устанавливайте позитивную связь</h4><p>Постарайтесь найти что-то хорошее в ученике. Иногда стоит сказать: «Я знаю, что ты можешь больше. Ты способный ученик, и я хочу, чтобы ты это показал». Позитивная связь — это основа доверия. Без доверия любые меры будут неэффективными.</p><p>Можно выделить ученика за его сильные стороны: «Я заметил, что у тебя отлично получается решать логические задачи. Может быть, ты поможешь остальным с этим заданием?». Это переключает внимание с негативного поведения на позитивные качества.</p><h4>Чего делать не стоит</h4><p>Не кричите — это показывает вашу слабость и даёт ученику то, что он хочет (вашу эмоциональную реакцию). Крик не решает проблему, а только усугубляет её.</p><p>Не угрожайте — угрозы работают только краткосрочно и разрушают доверие. Ученик может подчиниться из страха, но это не изменит его поведение в долгосрочной перспективе.</p><p>Не унижайте — никогда не высмеивайте ученика перед группой. Унижение оставляет глубокий след и убивает мотивацию учиться.</p><p>Не игнорируйте проблему — если её не решать, она будет только усугубляться. Проблемное поведение редко проходит само собой.</p><h4>Итог</h4><p>Проблемное поведение — это не приговор. Чаще всего оно вызвано скукой, страхом или потребностью во внимании. Спокойствие, чёткие правила и индивидуальный подход помогают справиться с большинством ситуаций. Помните: ваша задача — не наказать, а помочь ученику найти правильный путь.</p></div>` },
+        'noisy': { title: 'Как работать с шумными учениками', html: `<div class="content-card" data-editable="true"><h3>Как работать с шумными учениками</h3><p><strong>Почему ученики шумят?</strong><br>Шум на уроке — это естественное явление, особенно когда работают дети. Но важно понимать причины шума, чтобы правильно на него реагировать. Вот основные причины:</p><p>Им скучно — они не вовлечены в процесс, не понимают, зачем им это нужно, или тема им неинтересна. Скука — это главный враг тишины. Когда ученику неинтересно, он ищет другие способы развлечься, даже если это мешает остальным.</p><p>Они устали — нужен перерыв. Дети устают быстрее взрослых, особенно после школы. Если урок длится 90 минут, им нужно сделать паузу, чтобы восстановить внимание.</p><p>Они не понимают материал — и отвлекаются, чтобы скрыть это. Шум становится способом защититься от ощущения собственной некомпетентности.</p><p>Они просто активные по натуре — энергия требует выхода. Некоторые дети физически не могут сидеть тихо и неподвижно долгое время. Им нужно движение, взаимодействие, смена деятельности.</p><h4>Стратегия 1. Введите сигнал тишины</h4><p>Условный сигнал, который означает «внимание»:<br>Хлопок в ладоши (один или два раза).<br>Звонок или другой звуковой сигнал.<br>Поднятая рука (ученики тоже поднимают руки и замолкают).<br>Слово-пароль (например, «сфокусируйтесь»).</p><p>Ученики быстро привыкают к сигналу и реагируют на него автоматически. Важно: сигнал должен быть чётким и неизменным. Если вы используете несколько сигналов, ученики запутаются. Выберите один и используйте его постоянно.</p><h4>Стратегия 2. Говорите тише</h4><p>Парадокс: если вы говорите тише, ученики начинают прислушиваться. Им становится интересно, что вы сказали, и они замолкают. Попробуйте внезапно понизить голос до шёпота — это работает почти всегда. Ученики начинают слушать, чтобы не пропустить что-то важное.</p><p>Этот приём работает потому, что человек по природе любопытен. Когда кто-то говорит тихо, мы инстинктивно напрягаем слух, чтобы услышать. Используйте это в своей работе.</p><h4>Стратегия 3. Вовлекайте в диалог</h4><p>Часто шумят те ученики, которым скучно. Задавайте им вопросы, втягивайте в обсуждение. Если ученик включён в работу, у него нет времени на шум. Вопросы должны быть открытыми: «Что ты думаешь об этом решении?», «Как бы ты поступил в этой ситуации?», «Что было бы, если бы мы сделали иначе?».</p><p>Можно также использовать «метод случайного выбора» — спрашивать учеников, не поднимая руку. Это держит всех в тонусе, потому что никто не знает, кого спросят следующим.</p><h4>Стратегия 4. Правильная рассадка</h4><p>Шумных учеников сажайте ближе к себе. Когда они находятся в поле вашего внимания, они меньше отвлекаются. Если урок проходит онлайн, «сажайте» их на первый ряд виртуальной аудитории — чаще обращайтесь к ним по имени, вызывайте к камере.</p><p>Также можно сажать шумных учеников рядом с тихими и спокойными — они будут служить примером. Но не ставьте двух шумных учеников рядом — они будут усиливать друг друга.</p><h4>Стратегия 5. Активные перерывы</h4><p>Позволяйте ученикам двигаться. 5 минут простой разминки или игры снижают уровень шума на оставшуюся часть урока. Можно использовать:<br>Простые физические упражнения (приседания, наклоны).<br>Дыхательную гимнастику (глубокий вдох и выдох).<br>Быструю игру (например, «замри» или «сделай 5 прыжков»).<br>Мини-игры на внимание (например, «найди отличия» на экране).</p><p>После активного перерыва ученики успокаиваются и могут сосредоточиться на работе. Это особенно эффективно в середине длительного урока.</p><h4>Стратегия 6. Чёткая структура урока</h4><p>Когда ученики знают, что и когда будет происходить, они меньше отвлекаются. Сообщайте план урока в начале: «Сначала мы разберём теорию, потом сделаем практику, а в конце — игра». Если ученики знают, что их ждёт, они легче переносят скучные части урока.</p><p>Можно использовать визуальный план на экране — например, список этапов урока с временными отметками. Это помогает ученикам ориентироваться и понимать, сколько времени осталось до перемены или до интересного задания.</p><h4>Стратегия 7. Используйте метод «выключенного микрофона»</h4><p>Если шум становится слишком сильным, скажите: «Давайте сделаем паузу. Я выключаю микрофон на 5 секунд, и мы просто постоим в тишине». Это даёт ученикам время осознать свой шум и успокоиться.</p><p>Этот приём работает особенно хорошо в онлайн-формате. Просто скажите: «Сейчас все выключают микрофоны и слушают меня» — и подождите, пока все замолчат. Важно: самому тоже замолчать на несколько секунд, чтобы создать эффект ожидания.</p><h4>Чего делать не стоит</h4><p>Не кричите — это только усиливает шум. Ученики воспринимают крик как приглашение к соревнованию: кто громче.<br>Не наказывайте всю группу — это вызывает обиду. Если кто-то шумит, наказывайте только его, а не всех. Коллективное наказание создаёт чувство несправедливости.<br>Не игнорируйте — шум будет нарастать. Если вы не реагируете на шум, он становится нормой, и ученики перестают вас слушать.<br>Не включайте громкую музыку — это не поможет. Музыка только добавит шума и отвлечёт ещё больше.</p><h4>Итог</h4><p>Тишина на уроке — это не самоцель. Важно не подавить учеников, а создать рабочую атмосферу. Сигналы, вовлечение и правильная организация помогают контролировать шум без конфликтов. Помните: иногда шум — это признак того, что урок живой и ученики вовлечены. Ваша задача — направить эту энергию в правильное русло.</p></div>` },
+        'quiet': { title: 'Как работать с тихими учениками', html: `<div class="content-card" data-editable="true"><h3>Как работать с тихими учениками</h3><p><strong>Почему ученики бывают тихими?</strong><br>Тихие ученики часто остаются незамеченными, потому что они не создают проблем. Но это не значит, что им не нужна помощь. Вот основные причины, почему ученики могут быть тихими:</p><p>Они стесняются говорить при всех — боятся внимания, боятся, что их осудят или высмеют. Для них публичное выступление — это стресс, который они стараются избежать.</p><p>Они не уверены в своих знаниях — боятся ошибиться. Они скорее промолчат, чем рискнут сказать что-то неверное.</p><p>Они боятся ошибиться — страх неудачи сильнее желания ответить. Даже если они знают ответ, страх ошибки парализует их.</p><p>Они просто по натуре интроверты — им комфортнее наблюдать, чем говорить. Они могут быть очень умными и способными, но им не нравится быть в центре внимания.</p><p>У них был негативный опыт — их высмеяли или критиковали раньше, и теперь они боятся повторения.</p><h4>Стратегия 1. Задавайте вопросы в личку</h4><p>Тихие ученики могут прекрасно знать ответ, но бояться ответить публично. Отправьте им вопрос в личный чат или спросите при личной работе. Это даёт им безопасное пространство для ответа. Например: «Саша, я вижу, что ты отлично справился с заданием. Можешь написать мне в личку, как ты это сделал?».</p><p>Этот метод особенно эффективен в онлайн-уроках. Ученик может написать ответ в чат, не включая микрофон, что снижает уровень стресса. После того как он ответил в личку, вы можете сказать: «Саша предложил интересное решение — давайте его обсудим». Так ученик получает признание без публичного выступления.</p><h4>Стратегия 2. Хвалите их ответы</h4><p>Даже короткий или неполный ответ — повод для похвалы. «Отличный вопрос», «Ты очень точно подметил», «Здорово, что ты это заметил», «Интересная мысль, я о ней не подумал». Похвала должна быть искренней и конкретной, а не общей.</p><p>Важно: хвалите не только правильные ответы, но и попытки ответить. Если ученик сказал что-то не совсем правильно, но пытался — похвалите за попытку: «Отлично, что ты попробовал! Давай посмотрим, что можно улучшить». Это стимулирует ученика пробовать снова.</p><h4>Стратегия 3. Давайте время на размышление</h4><p>Не торопите тихого ученика с ответом. Дайте ему время подумать. Часто им нужно чуть больше времени, чтобы сформулировать мысль. Скажите: «Саша, не торопись, подумай ещё пару секунд, я подожду». Это снижает стресс и даёт ученику возможность собраться.</p><p>Можно также давать задания заранее: «На следующем уроке мы будем обсуждать эту тему. Подумайте дома над вопросами». Так у тихих учеников будет время подготовиться и они будут чувствовать себя увереннее.</p><h4>Стратегия 4. Создайте безопасную среду</h4><p>Ученик должен знать, что ошибка — это нормально. Говорите об этом открыто: «Ошибки — это часть обучения. Даже я иногда ошибаюсь». Создайте атмосферу, где ученики не боятся пробовать новое. Если кто-то ошибся, скажите: «Отличная попытка! Давай посмотрим, что пошло не так и как это исправить».</p><p>Важно: никогда не высмеивайте ошибки учеников. Если кто-то из других учеников смеётся над ошибкой, сразу остановите это: «Мы все здесь учимся, и ошибки — это нормально. Давайте поддерживать друг друга».</p><h4>Стратегия 5. Используйте письменные задания</h4><p>Некоторые ученики лучше проявляют себя в письменной форме. Давайте им письменные задания — они чувствуют себя увереннее. Например, вместо устного ответа попросите написать решение в чате или в документе.</p><p>Письменные задания также дают возможность ученикам проявить свои знания без стресса публичного выступления. Это особенно важно для учеников, которые боятся говорить при всех.</p><h4>Стратегия 6. Обращайтесь по имени</h4><p>Когда вы обращаетесь к тихому ученику по имени, он чувствует себя значимым. Начинайте вопрос с имени: «Саша, как ты думаешь…», «Анна, что ты можешь сказать об этом…». Это привлекает внимание и показывает, что вы его видите и цените.</p><p>Регулярное обращение по имени создаёт личную связь и повышает вовлечённость. Ученик начинает чувствовать, что он — часть группы, а не просто наблюдатель.</p><h4>Стратегия 7. Создавайте ситуации успеха</h4><p>Давайте тихому ученику задания, в которых он точно успешен. Это повышает его уверенность и даёт положительный опыт. Например, если вы знаете, что ученик хорошо разбирается в какой-то теме, дайте ему задание, связанное с ней, и обязательно похвалите за результат.</p><p>Ситуации успеха создают положительное подкрепление и постепенно меняют отношение ученика к публичным выступлениям. Он начинает верить, что у него получается, и становится более уверенным.</p><h4>Чего делать не стоит</h4><p>Не заставляйте говорить публично — это вызовет стресс. Ученик может замкнуться ещё больше или даже отказаться от участия в уроке.<br>Не игнорируйте их — они перестанут участвовать совсем. Тихие ученики часто остаются незамеченными, но им нужна поддержка не меньше, чем активным.<br>Не сравнивайте с активными учениками — «вот Маша всегда отвечает». Сравнение создаёт чувство неполноценности.<br>Не говорите «ты слишком тихий» — это может быть воспринято как критика. Вместо этого скажите: «Мне интересно твоё мнение, я хочу его услышать».</p><h4>Итог</h4><p>Тихие ученики — это не проблема, а особенность. Ваша задача — создать условия, в которых они смогут раскрыться. Индивидуальный подход, терпение и поддержка помогают тихим ученикам стать увереннее. Помните: иногда самые глубокие мысли приходят от самых тихих учеников.</p></div>` },
+        'group': { title: 'Как проводить групповые уроки', html: `<div class="content-card" data-editable="true"><h3>Как проводить групповые уроки</h3><p><strong>Особенности группового урока</strong><br>Групповой урок — это совершенно другой формат, чем индивидуальное занятие. Здесь ваша задача — работать со всей группой одновременно, учитывая разные уровни подготовки и скорости работы. Это требует особых навыков и подходов.</p><p>Основные особенности группового урока:<br>Не все ученики работают с одинаковой скоростью. Кто-то быстрее, кто-то медленнее.<br>Кто-то активнее, кто-то пассивнее.<br>Нужно балансировать между всеми учениками, чтобы никто не чувствовал себя забытым.<br>В группе может быть от 2 до 12 учеников.<br>Нужно учитывать динамику группы: одни ученики могут доминировать, другие — замыкаться.</p><h4>Стратегия 1. Работайте со всей группой</h4><p>Нельзя посвящать всё время одному ученику. Урок должен быть ориентирован на группу в целом. Если один ученик отстаёт — помогите ему после урока или дайте индивидуальное задание. Ваша задача — держать всех в одном темпе, даже если это сложно.</p><p>Используйте техники, которые вовлекают всех одновременно: общие вопросы, опросы (в чате или устно), задания, которые можно выполнять параллельно. Например, задайте вопрос всей группе и попросите писать ответы в чат. Так вы видите, кто ответил, а кто нет, и можете скорректировать объяснение.</p><h4>Стратегия 2. Используйте парную работу</h4><p>Сажайте ученика с высоким уровнем рядом с учеником с низким уровнем. Сильный помогает слабому — это полезно обоим. Сильный ученик закрепляет свои знания, объясняя материал, а слабый получает индивидуальную помощь.</p><p>Важно: не делайте это наказанием. Сделайте парную работу добровольной или организованной в игровой форме. Например, «Сейчас вы будете работать в парах. Тот, кто сделает быстрее, помогает партнёру. Побеждает пара, где оба сделали правильно».</p><h4>Стратегия 3. Делайте общие демонстрации</h4><p>Показывайте на своём экране, ученики повторяют. Это позволяет держать всех в одном темпе. Общая демонстрация — это основа группового урока. Все видят одно и то же и могут задавать общие вопросы.</p><p>Важно: после демонстрации дайте время ученикам повторить самостоятельно. Не переходите к следующему шагу, пока большинство не справится. Если кто-то отстаёт, помогите ему индивидуально, но не останавливайте всю группу.</p><h4>Стратегия 4. Не ждите, что все сделают одновременно</h4><p>Кто-то сделает за 5 минут, кто-то за 15. Это нормально. Дайте дополнительное задание тем, кто сделал быстрее. Это может быть:<br>Усложнение текущего задания.<br>Задание на творчество (например, добавить декорации или дополнительные функции).<br>Помощь другим ученикам.<br>Изучение дополнительного материала.</p><p>Важно: у быстрых учеников всегда должно быть занятие, чтобы они не отвлекались и не мешали остальным.</p><h4>Стратегия 5. Контролируйте тайминг</h4><p>Групповой урок должен быть не менее 80 минут (для групп 2+ учеников). Если видите, что большинство отстаёт — упрощайте задание, сокращайте второстепенные элементы. Важно успеть выполнить основную цель урока.</p><p>Используйте таймер на экране, чтобы ученики видели, сколько времени осталось. Это помогает им управлять своим временем и не отвлекаться.</p><h4>Структура группового урока</h4><p>Вступление (5-10 минут) — приветствие, настройка на работу, повторение прошлого урока. Спросите, что запомнилось, что было сложно. Это помогает настроиться на урок.</p><p>Теория (15-20 минут) — новая тема, объяснение, демонстрация. Используйте наглядные материалы: презентации, примеры, демонстрации кода. Убедитесь, что все ученики понимают основные концепции.</p><p>Практика с преподавателем (20-25 минут) — делаете вместе, шаг за шагом. Ученики повторяют за вами, задают вопросы. Это основной этап, где формируются навыки.</p><p>Самостоятельная работа (20-25 минут) — ученики делают сами, вы помогаете индивидуально. Ходите по классу (или переключайтесь между учениками в онлайн-формате), отвечайте на вопросы, помогайте отстающим.</p><p>Заключение (5-10 минут) — обсуждение, вопросы, домашнее задание. Подведите итоги, похвалите учеников, дайте домашнее задание.</p><h4>Особые случаи</h4><p>Если группа слишком быстрая — не завершайте урок раньше времени. Дайте творческие задания, дополнительные уровни, усложнения. Можно предложить ученикам создать свой собственный проект на основе изученного материала.</p><p>Если группа слишком медленная — сокращайте объём работы, оставляя только самое важное. Суть темы должна быть передана в любом случае. Можно упростить задания или дать больше времени на их выполнение.</p><p>Если в группе есть явный лидер — используйте его для помощи другим. Дайте ему роль «помощника преподавателя». Это не только займёт его, но и создаст позитивную атмосферу в группе.</p><h4>Итог</h4><p>Групповой урок сложнее индивидуального, но и эффективнее. Ученики учатся друг у друга, создаётся здоровая конкуренция и атмосфера сотрудничества. Главное — удерживать баланс и вовлекать всех. Помните: ваша задача — не просто дать знания, а создать среду, где каждый ученик может развиваться в своём темпе, но при этом не чувствовать себя изолированным.</p></div>` },
+        'motivation': { title: 'Как мотивировать учеников', html: `<div class="content-card" data-editable="true"><h3>Как мотивировать учеников</h3><p><strong>Почему ученики теряют мотивацию?</strong><br>Мотивация — это двигатель обучения. Без неё даже самый способный ученик не будет учиться. Вот основные причины, почему ученики теряют мотивацию:</p><p>Им скучно — задания однотипные, неинтересные, не соответствуют их возрасту или интересам. Они не видят связи между тем, что изучают, и реальной жизнью.</p><p>Они не видят результата — не понимают, зачем это нужно, где это пригодится. Им кажется, что они зря тратят время.</p><p>Они боятся ошибок — страх неудачи парализует. Они боятся выглядеть глупо, боятся критики.</p><p>Им не хватает внимания — чувствуют себя неважными, незамеченными. Они думают, что преподавателю всё равно на них.</p><p>Они не понимают материал — и отключаются. Когда материал слишком сложный, мозг защищается и переключается на что-то другое.</p><h4>Стратегия 1. Показывайте результат</h4><p>Ученики должны видеть, что у них получается. Показывайте прогресс: «Посмотри, что ты сделал за час!», «Ты начал с пустого экрана, а теперь у тебя целая игра!», «Твой код стал работать в два раза быстрее!». Делайте скриншоты проектов, показывайте, как они менялись от урока к уроку.</p><p>Ведите портфолио достижений каждого ученика. Это может быть папка с проектами или таблица с отметками о пройденных темах. Регулярно показывайте ученикам их прогресс — это мощный мотиватор.</p><h4>Стратегия 2. Связывайте с реальностью</h4><p>Объясняйте, зачем это нужно. «Этот навык пригодится тебе, когда ты будешь создавать свою игру», «Так работают все программы, которыми ты пользуешься», «Эти алгоритмы используют в банках, чтобы защищать деньги». Показывайте примеры из жизни: как программирование используется в профессиях, которые интересны ученикам.</p><p>Можно приглашать гостей — специалистов из IT-сферы, которые расскажут, как они используют программирование в своей работе. Это даёт ученикам реальный взгляд на будущее.</p><h4>Стратегия 3. Используйте игровые элементы</h4><p>Баллы, уровни, достижения — это работает. Сделайте систему накопления Кодкоинов, давайте звания, отмечайте успехи. Игровые элементы создают здоровую конкуренцию и делают обучение более увлекательным.</p><p>Можно создать «доску лидеров» в классе или в чате. Это стимулирует учеников стараться больше. Но важно: не создавайте слишком жёсткую конкуренцию, чтобы слабые ученики не чувствовали себя проигравшими.</p><h4>Стратегия 4. Начисляйте Кодкоины</h4><p>Кодкоины — это ваша внутренняя валюта. За выполнение заданий, за помощь другим, за активность. Это создаёт систему поощрений и даёт ученикам видимый результат их усилий.</p><p>Важно: система начисления должна быть прозрачной и понятной. Ученики должны знать, за что они получают Кодкоины, и сколько им нужно для получения приза.</p><h4>Стратегия 5. Хвалите публично и в личку</h4><p>Хвалите обязательно. Но хвалите конкретно: «Ты здорово продумал логику» вместо «ты молодец». Конкретная похвала показывает, что вы действительно заметили усилия ученика.</p><p>Используйте разные формы похвалы: публичную (в группе), личную (в чате), письменную (в комментариях к работам). Это создаёт атмосферу поддержки и признания.</p><h4>Стратегия 6. Давайте право выбора</h4><p>«Как ты хочешь сделать это задание?», «Какой проект ты хочешь делать?» — чувство контроля повышает мотивацию. Ученики ценят возможность выбора и чувствуют ответственность за свои решения.</p><p>Можно давать выбор в разных аспектах: тема проекта, формат выполнения (код, презентация, видео), уровень сложности. Чем больше выбора, тем выше вовлечённость.</p><h4>Стратегия 7. Используйте проектную работу</h4><p>Дайте ученикам возможность создавать что-то своё. Проекты, игры, приложения — это то, что их вдохновляет. Проектная работа даёт ощущение цели и смысла.</p><p>Важно: проекты должны быть реалистичными и достижимыми. Слишком сложные проекты могут демотивировать. Начинайте с маленьких проектов и постепенно усложняйте.</p><h4>Чего делать не стоит</h4><p>Не критикуйте личность — «ты ленивый», «ты неспособный». Критика личности разрушает самооценку и мотивацию.<br>Не сравнивайте — «вот Петя уже сделал, а ты нет». Сравнение создаёт напряжение и чувство неполноценности.<br>Не заставляйте — принуждение убивает мотивацию. Вместо принуждения используйте убеждение и поощрение.<br>Не используйте угрозы — это разрушает доверие. Угрозы создают страх, а не мотивацию.</p><h4>Итог</h4><p>Мотивация — это не волшебство, а система. Показывайте результат, связывайте с реальностью, используйте игровые элементы, хвалите и давайте выбор. Это работает. Помните: ваша задача — не просто научить, а вдохновить ученика на постоянное развитие.</p></div>` },
+        'feedback': { title: 'Как давать обратную связь', html: `<div class="content-card" data-editable="true"><h3>Как давать обратную связь</h3><p><strong>Правило 1. Хвалите процесс, а не результат</strong><br>Вместо «ты сделал игру» скажите «ты отлично продумал логику движения врагов». Вместо «отлично» скажите «то, как ты организовал код — это очень грамотно». Обратная связь на процесс показывает, что вы цените усилия, а не только конечный результат.</p><p>Это особенно важно для слабых учеников. Они могут не достичь идеального результата, но если вы похвалите их процесс, они будут чувствовать, что их усилия замечены и ценятся.</p><p><strong>Правило 2. Будьте конкретными</strong><br>Конкретика работает лучше общих фраз. Вместо «хорошо» скажите «здорово, что ты использовал циклы здесь — это правильное решение». Конкретная обратная связь показывает, что вы действительно смотрели работу и заметили детали.</p><p>Старайтесь давать обратную связь по 2-3 конкретным моментам: что сделано хорошо, что можно улучшить, как это улучшить. Это структурирует обратную связь и делает её полезной.</p><p><strong>Правило 3. Указывайте на ошибки конструктивно</strong><br>Не говорите «неправильно», скажите «здесь есть небольшая ошибка, давай посмотрим, что можно исправить». Конструктивная критика — это не «что плохо», а «как сделать лучше».</p><p>Предлагайте решения, а не просто указывайте на ошибки. Например: «Здесь ошибка в условии. Попробуй поменять знак с > на < — тогда код будет работать правильно».</p><p><strong>Правило 4. Хвалите до критики</strong><br>Сначала положительное, потом — что можно улучшить. Это называется «сэндвич-метод»: похвала → критика → похвала. Например: «Отлично, ты правильно использовал циклы. Есть небольшая ошибка в условии, давай исправим. А вообще — отличный прогресс за сегодня!».</p><p>Этот метод работает, потому что ученик не чувствует себя «плохим» после критики. Он видит, что вы цените его усилия и верите в его способности.</p><p><strong>Правило 5. Задавайте наводящие вопросы</strong><br>Вместо «ты понял, как это работает?» спросите «как ты думаешь, что здесь происходит?», «почему этот код работает именно так?». Наводящие вопросы стимулируют мышление и помогают ученику самостоятельно найти решение.</p><p>Они также показывают, что вы уважаете способности ученика и верите, что он может разобраться сам.</p><p><strong>Правило 6. Завершайте на позитиве</strong><br>Всегда оставляйте ученика с хорошим настроением. Даже если есть ошибки, последние слова должны быть поддерживающими. Например: «Ты проделал большую работу. Есть над чем поработать, но я уверен, что у тебя получится».</p><p>Позитивное завершение создаёт ощущение успеха и мотивацию двигаться дальше.</p><h4>Примеры хорошей обратной связи</h4><p>«Отлично, ты включил демонстрацию экрана — молодец. Смотри, код в целом правильный, ты хорошо поработал, но вот здесь небольшая ошибка, которая мешает. Давай поправим вот так. А вообще — отличный прогресс за сегодня!»</p><p>«Ты отлично справился с логикой игры. Здорово, что ты использовал функции для повторяющихся действий. Единственное, что можно улучшить — это оптимизировать код, убрав лишние проверки. Попробуй переписать этот участок. Но в целом — очень хорошая работа!»</p><h4>Примеры плохой обратной связи</h4><p>«Неправильно, делай заново». «Ты что, не понимаешь, как это работает?» «Вот Маша сделала лучше».</p><h4>Чего делать не стоит</h4><p>Не используйте пустые фразы — «молодец» без конкретики не работает. Ученик не понимает, что именно он сделал хорошо.<br>Не критикуйте личность — не «ты невнимательный», а «в этом месте есть неточность». Критика личности разрушает самооценку.<br>Не сравнивайте — «вот Маша сделала лучше». Сравнение создаёт напряжение и чувство неполноценности.<br>Не давайте обратную связь при всех, если это критика — это унижает ученика и создаёт страх ошибки.</p><h4>Итог</h4><p>Обратная связь — это инструмент роста. Конкретная, позитивная, конструктивная — она помогает ученику двигаться вперёд и чувствовать поддержку. Помните: ваша задача — не просто оценить, а помочь ученику стать лучше.</p></div>` },
+        'late': { title: 'Что делать если ученик опоздал', html: `<div class="content-card" data-editable="true"><h3>Что делать, если ученик опоздал</h3><p><strong>Если опоздание до 15 минут</strong><br>Впустите ученика, дайте ему ссылку на материалы и скажите: «Мы сейчас делаем то-то, давай включайся». Не останавливайте урок ради одного опоздавшего. Ваша задача — продолжать урок, а ученик должен адаптироваться к текущему моменту.</p><p>Если возможно, отправьте опоздавшему ученику в чат краткое резюме того, что было в начале урока: «Мы уже прошли теорию, сейчас практика. Вот ссылка на слайды». Это поможет ему быстрее включиться.</p><p><strong>Если опоздание 15-30 минут</strong><br>Ученик уже пропустил важную часть. Дайте ему краткий текст или скриншоты, объясните суть за 2 минуты. Скажите: «Мы уже прошли теорию, сейчас практика. Вот что мы сделали — давай включайся». Не тратьте время всей группы на объяснение одному ученику.</p><p>Если возможно, предложите ученику присоединиться к практической части, а теорию разобрать после урока индивидуально. Это позволит ему не отставать от группы.</p><p><strong>Если опоздание более 30 минут</strong><br>Вы уже успели начать практическую работу по новой теме и понимаете, что этот ученик задержит всю группу, если будет догонять. Вежливо объясните ему, что сегодня он будет зрителем и выполнит работу по записи урока, которую вы отправите.</p><p>Скажите: «Саша, мы уже далеко ушли, и я боюсь, что ты не успеешь всё сделать. Давай ты сегодня посмотришь, как мы работаем, а после урока я пришлю тебе запись, и ты сделаешь задание самостоятельно. Если будут вопросы — я помогу». Это сохраняет достоинство ученика и не тормозит группу.</p><p><strong>Если опоздания систематические</strong><br>Проведите с учеником профилактическую беседу, объясняя все последствия его опозданий. Спросите: «Я заметил, что ты часто опаздываешь. В чём причина? Может быть, я могу помочь?». Если не помогает — обратитесь к его родителям.</p><p>Важно: не делайте это публичным. Обсуждайте проблему наедине, чтобы не унижать ученика. Если вы видите, что опоздания связаны с техническими проблемами (например, не может подключиться к Контур.Толк), помогите их решить.</p><h4>Важно</h4><p>Не делайте замечание при всей группе — это унижает ученика и создаёт напряжение. Замечание должно быть личным и деликатным.<br>Не начинайте урок заново из-за опоздавшего — это несправедливо по отношению к тем, кто пришёл вовремя.<br>Не ставьте оценку за опоздание — это не относится к учебным достижениям.<br>Если ученик опоздал, но активно работает — это уже хорошо. Он старается наверстать упущенное, и это заслуживает поддержки, а не критики.</p><h4>Итог</h4><p>Опоздания — это неизбежная часть работы преподавателя. Важно реагировать на них спокойно и конструктивно, не нарушая ход урока и не унижая ученика. Помните: ваша задача — создать комфортную среду для обучения, даже если ученики иногда опаздывают.</p></div>` },
+        'ignore': { title: 'Ученик игнорирует преподавателя', html: `<div class="content-card" data-editable="true"><h3>Ученик игнорирует преподавателя</h3><p><strong>Признаки проблемы</strong><br>Ученик игнорирует преподавателя — это одна из самых сложных ситуаций. Вот основные признаки:</p><p>Ученик не отвечает на вопросы, даже когда вы обращаетесь к нему напрямую.<br>Не просит помощи, даже когда нуждается.<br>Не выполняет задания или делает их небрежно.<br>Выключил камеру и микрофон (в онлайн-формате) и молчит.<br>Не реагирует на обращения по имени.</p><h4>Алгоритм действий</h4><p><strong>Шаг 1. Узнайте причину</strong><br>Свяжитесь с родителями: «Я заметил, что Саша на уроке молчит. У него всё в порядке? Может быть, технические проблемы?». Иногда проблема может быть на стороне родителей или в технических неполадках.<br>Если технические проблемы исключены, спросите ученика напрямую (в личном чате): «Я заметил, что ты сегодня не отвечаешь. Всё в порядке? Может быть, я могу тебе помочь?».</p><p><strong>Шаг 2. Предложите индивидуальный подход</strong><br>Скажите ученику в личку: «Я вижу, что тебе сложно говорить при всех. Может быть, я могу тебе помочь в личном чате?». Это даёт ученику безопасное пространство для общения.<br>Можно также предложить альтернативные формы участия: письменные ответы в чате, индивидуальные консультации после урока.</p><p><strong>Шаг 3. Настройте контакт отдельным разговором</strong><br>Выделите +10 минут в конце урока, чтобы ребёнок воспринимал вас как друга. Рабочий приём в таком разговоре — выслушать жизненные интересы и соединить их с проектом. Например: «Я знаю, что ты любишь футбол. Хочешь, мы сделаем футбольную игру?».<br>Это создаёт личную связь и показывает ученику, что вы видите в нём человека, а не просто ученика.</p><p><strong>Шаг 4. Проверьте техническую сторону</strong><br>Возможно, у ребёнка нет микрофона и камеры или он не может их настроить. Предложите подключиться в ЛС за 5 минут до урока, чтобы всё настроить вместе. Иногда проблема не в желании, а в возможностях.</p><p><strong>Шаг 5. Если ничего не помогает</strong><br>Обратитесь к руководителю или психологу школы. Это может быть признаком более серьёзных проблем, которые требуют профессиональной помощи.</p><h4>Чего делать не стоит</h4><p>Не игнорируйте проблему — она не решится сама. Игнорирование только усугубит ситуацию.<br>Не делайте замечания при всех — это усугубит ситуацию. Ученик замкнётся ещё больше.<br>Не давите на ученика — это вызовет сопротивление. Давление создаёт стресс, а не мотивацию.<br>Не ставьте ультиматумы — это разрушает доверие. Ультиматумы создают враждебную атмосферу.</p><h4>Итог</h4><p>Игнорирование — это всегда сигнал о проблеме. Ваша задача — понять причину и помочь ученику. Терпение, индивидуальный подход и поддержка помогут восстановить контакт.</p></div>` },
+        'mixed-levels': { title: 'Разные уровни подготовки в группе', html: `<div class="content-card" data-editable="true"><h3>Разные уровни подготовки в группе</h3><p><strong>Стратегия 1. Давайте задания с разной сложностью</strong><br>Базовое задание — для всех. Дополнительное — для сильных. Упрощённое — для слабых. Пример: задание «Сделай игру» можно разбить:<br>Базовое: двигающийся персонаж (для всех).<br>Сложное: враги и препятствия (для сильных).<br>Дополнительное: несколько уровней и босс (для самых сильных).</p><p>Это позволяет каждому ученику работать на своём уровне и чувствовать успех.</p><p><strong>Стратегия 2. Используйте пары</strong><br>Сильный + слабый = отличная комбинация. Сильный объясняет, слабый учится. Но не делайте это постоянно — иногда давайте задания индивидуально, чтобы каждый развивался в своём темпе.</p><p>Важно: меняйте пары регулярно, чтобы ученики не привыкали к одному партнёру и учились работать с разными людьми.</p><p><strong>Стратегия 3. Не ждите, что все закончат одновременно</strong><br>Это главная ошибка. Не ставьте урок в зависимость от самого медленного ученика. Давайте дополнительное задание тем, кто закончил быстрее. Это сохраняет темп и не даёт сильным ученикам скучать.</p><p><strong>Стратегия 4. Индивидуальные консультации</strong><br>Если ученик совсем отстаёт, назначьте ему индивидуальную консультацию или отработку. Это позволяет разобрать материал в спокойной обстановке без давления группы.</p><p><strong>Стратегия 5. Регулярно проверяйте понимание</strong><br>Задавайте вопросы, делайте быстрые тесты, просите показать код. Это помогает понять, кто отстаёт, а кто опережает. Регулярная проверка позволяет своевременно корректировать программу.</p><h4>Итог</h4><p>Разноуровневая группа — это вызов, но и возможность. Правильная дифференциация заданий и индивидуальный подход помогают вовлечь всех. Помните: ваша задача — чтобы каждый ученик чувствовал себя успешным.</p></div>` },
+        'attention': { title: 'Управление вниманием на уроке', html: `<div class="content-card" data-editable="true"><h3>Управление вниманием на уроке</h3><p><strong>Метод 1. Вовлекайте в диалог</strong><br>Не ведите монолог. Задавайте вопросы каждые 3-5 минут: «Как думаешь?», «Что будет дальше?», «Почему это работает так?». Диалог держит внимание и делает урок интерактивным.</p><p><strong>Метод 2. Меняйте активность</strong><br>Теория → практика → обсуждение → игра. Смена деятельности не даёт вниманию рассеяться. Каждый новый вид активности требует переключения, что освежает восприятие.</p><p><strong>Метод 3. Обращайтесь по имени</strong><br>Когда вы называете ученика по имени, он чувствует себя вовлечённым. «Саша, как ты думаешь?». Это привлекает внимание и показывает, что вы видите каждого ученика.</p><p><strong>Метод 4. Используйте визуальные материалы</strong><br>Картинки, схемы, примеры — они привлекают внимание лучше слов. Визуальные материалы помогают удерживать внимание и делают информацию более доступной.</p><p><strong>Метод 5. Делайте короткие перерывы</strong><br>5-минутная разминка, дыхательное упражнение или просто «встаньте и потянитесь» — это восстанавливает внимание. Перерывы особенно важны для младших школьников.</p><p><strong>Метод 6. Используйте неожиданные вопросы</strong><br>Неожиданный вопрос возвращает внимание: «А что было бы, если бы здесь не было цикла?». Неожиданность заставляет мозг активизироваться.</p><p><strong>Метод 7. Связывайте с жизнью</strong><br>Приводите примеры из реальной жизни. Дети лучше понимают и запоминают, когда видят связь с тем, что им знакомо. Например: «Как ты думаешь, как работает поиск в Google? Это те же алгоритмы, которые мы изучаем».</p><h4>Итог</h4><p>Внимание — это ресурс, который нужно экономить. Диалог, смена активностей и визуальные материалы помогают удерживать внимание на всём уроке.</p></div>` },
+        'crying': { title: 'Что делать если ученик заплакал', html: `<div class="content-card" data-editable="true"><h3>Что делать, если ребёнок заплакал на уроке</h3><p><strong>Почему дети плачут на уроке?</strong><br>Фрустрация от неудачи — ребёнок не может выполнить задание, код не работает, он чувствует себя беспомощным. Это самая частая причина.<br>Усталость — дети устают быстрее взрослых. Особенно к концу недели или после насыщенного дня в школе.<br>Личные проблемы — домашние конфликты, проблемы в школе, ссоры с друзьями.<br>Чувство несправедливости — если ребёнок считает, что его несправедливо оценили или обидели.<br>Сравнение с другими — когда ребёнок видит, что другие делают лучше, и чувствует себя неспособным.<br>Страх ошибки — боязнь сделать что-то неправильно и получить негативную реакцию.</p><h4>Алгоритм действий</h4><p><strong>Шаг 1. Заметить и не игнорировать</strong><br>Не делайте вид, что ничего не происходит. Заметить, что ребёнок расстроен — уже половина решения. Если вы видите, что ученик плачет, сразу реагируйте.</p><p><strong>Шаг 2. Переключиться в личный чат</strong><br>Никогда не обсуждайте эмоциональное состояние ребёнка при всей группе. Переключитесь в личный чат или скажите: «Саша, давай на минутку отойдём, я хочу тебе помочь».</p><p><strong>Шаг 3. Спросите спокойным голосом</strong><br>«Я вижу, что ты расстроен. Что случилось?», «Ты хочешь поделиться, что произошло?», «Может быть, я могу тебе помочь?». Говорите мягко, без давления. Не требуйте ответа сразу — ребёнок может не быть готов говорить.</p><p><strong>Шаг 4. Примите эмоцию</strong><br>Если ребёнок говорит, что ему сложно или он злится — примите это. Скажите: «Я понимаю, это действительно сложно», «Ты имеешь право расстраиваться, если что-то не получается». Не обесценивайте чувства ребёнка.</p><p><strong>Шаг 5. Предложите решение</strong><br>«Давай попробуем разобраться вместе», «Я помогу тебе сделать это задание по шагам», «Может быть, тебе нужно отдохнуть 5 минут?». Дайте ребёнку выбор: «Ты хочешь, чтобы я помог, или хочешь подумать сам?».</p><p><strong>Шаг 6. Дайте время успокоиться</strong><br>Иногда ребёнку нужно просто выплакаться. Не торопите его, не говорите «хватит плакать». Дайте ему время. Скажите: «Я подожду, когда ты будешь готов».</p><p><strong>Шаг 7. После урока свяжитесь с родителями</strong><br>Если ребёнок сильно плакал, напишите родителям: «Саша сегодня расстроился на уроке, ему было сложно с заданием. Я помог ему, но, возможно, стоит обсудить это дома».</p><h4>Чего делать не стоит</h4><p>Не игнорируйте — ребёнок чувствует себя брошенным.<br>Не стыдите — не говорите: «Ты же взрослый, перестань плакать».<br>Не обесценивайте — не говорите: «Ерунда, не расстраивайся».<br>Не давайте советов, пока ребёнок плачет — сначала дайте выплакаться, потом помогайте.<br>Не делайте это публичным — не обсуждайте при всех.<br>Не говорите «возьми себя в руки» — ребёнок и так старается.</p><h4>Итог</h4><p>Плач на уроке — это не катастрофа. Это сигнал, что ребёнку нужна поддержка. Ваше спокойствие, принятие и готовность помочь помогут ребёнку справиться с эмоциями и вернуться к работе. Помните: дети запоминают не столько то, что вы им рассказали, сколько то, как вы с ними обращались в трудную минуту.</p></div>` },
+        'training': { title: 'Дообучение', html: `<div class="content-card" data-editable="true"><h3>Раздел в разработке</h3></div>` },
+      };
+
+      // Объединяем все данные
+      const pages = {
+        ...generalPages,
+        ...window.installPages || {},
+        ...window.techPages || {},
+      };
+
+      // ===== ЗАГРУЗКА ДАННЫХ ИЗ FIREBASE =====
+      async function loadFromFirebase() {
+        try {
+          const docRef = await db.collection('pages').doc('content').get();
+          if (docRef.exists) {
+            const data = docRef.data();
+            for (const [key, value] of Object.entries(data)) {
+              if (pages[key]) {
+                pages[key].html = value.html;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки из Firebase:', error);
+        }
+      }
+
+      // ===== СОХРАНЕНИЕ В FIREBASE =====
+      async function saveToFirebase() {
+        try {
+          const dataToSave = {};
+          document.querySelectorAll('.content-card[data-editable="true"]').forEach(card => {
+            dataToSave[currentPageId] = { html: card.innerHTML };
+          });
+          await db.collection('pages').doc('content').set(dataToSave, { merge: true });
+          EDIT_STATUS.textContent = 'Сохранено в облако';
+          setTimeout(() => { EDIT_STATUS.textContent = ''; }, 2000);
+        } catch (error) {
+          console.error('Ошибка сохранения в Firebase:', error);
+          EDIT_STATUS.textContent = 'Ошибка сохранения';
+        }
+      }
+
+      // Функция отображения страницы
+      function showPage(pageId) {
+        currentPageId = pageId;
+        const page = pages[pageId];
+        if (!page) return;
+        ROOT.innerHTML = page.html;
+        document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+        const activeBtn = document.querySelector(`.menu-item[data-page="${pageId}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (pageId === 'templates') bindTemplateConstructor();
+        if (isEditMode) enableEditMode();
+        bindSearchInput();
+      }
+
+      // Привязка поиска
+      function bindSearchInput() {
+        const searchInput = document.getElementById('global-search');
+        const suggestions = document.getElementById('suggestions');
+        if (!searchInput || !suggestions) return;
+        searchInput.addEventListener('input', () => {
+          const query = searchInput.value.toLowerCase().trim();
+          if (!query) { suggestions.classList.add('hidden'); return; }
+          const results = [];
+          for (const [id, page] of Object.entries(pages)) {
+            if (page.title && page.title.toLowerCase().includes(query) || page.html && page.html.toLowerCase().includes(query)) {
+              results.push({ id, title: page.title || 'Главная' });
+            }
+          }
+          if (results.length) {
+            suggestions.innerHTML = '';
+            results.slice(0, 8).forEach(r => {
+              const li = document.createElement('li');
+              li.textContent = r.title;
+              li.addEventListener('click', () => {
+                showPage(r.id);
+                suggestions.classList.add('hidden');
+                searchInput.value = '';
+              });
+              suggestions.appendChild(li);
+            });
+            suggestions.classList.remove('hidden');
+          } else {
+            suggestions.classList.add('hidden');
+          }
+        });
+      }
+
+      // Функция для работы с шаблонными сообщениями
+      function bindTemplateConstructor() {
+        const courseSelect = document.getElementById('course-select');
+        const moduleSelect = document.getElementById('module-select');
+        const lessonSelect = document.getElementById('lesson-select');
+        const templateOutput = document.getElementById('template-output');
+        const copyTemplateBtn = document.getElementById('copy-template');
+        if (!courseSelect || !moduleSelect || !lessonSelect) return;
+
+        courseSelect.addEventListener('change', () => {
+          const course = courseSelect.value;
+          moduleSelect.innerHTML = '<option value="">— Модуль —</option>';
+          lessonSelect.innerHTML = '<option value="">— Урок —</option>';
+          lessonSelect.disabled = true;
+          moduleSelect.disabled = !course;
+          templateOutput.textContent = 'Выберите курс, модуль и урок';
+          if (course && window.templateData && window.templateData[course]) {
+            Object.keys(window.templateData[course]).forEach(m => {
+              const opt = document.createElement('option');
+              opt.value = m; opt.textContent = m;
+              moduleSelect.appendChild(opt);
+            });
+          }
+        });
+
+        moduleSelect.addEventListener('change', () => {
+          const course = courseSelect.value;
+          const module = moduleSelect.value;
+          lessonSelect.innerHTML = '<option value="">— Урок —</option>';
+          lessonSelect.disabled = !module;
+          templateOutput.textContent = 'Выберите курс, модуль и урок';
+          if (course && module && window.templateData && window.templateData[course][module]) {
+            Object.keys(window.templateData[course][module]).forEach(l => {
+              const opt = document.createElement('option');
+              opt.value = l; opt.textContent = l;
+              lessonSelect.appendChild(opt);
+            });
+          }
+        });
+
+        lessonSelect.addEventListener('change', () => {
+          const course = courseSelect.value;
+          const module = moduleSelect.value;
+          const lesson = lessonSelect.value;
+          templateOutput.textContent = (course && module && lesson && window.templateData && window.templateData[course][module][lesson])
+            ? window.templateData[course][module][lesson]
+            : 'Выберите курс, модуль и урок';
+        });
+
+        copyTemplateBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(templateOutput.textContent).then(() => {
+            copyTemplateBtn.textContent = 'Скопировано';
+            setTimeout(() => { copyTemplateBtn.textContent = 'Скопировать текст'; }, 1500);
+          });
+        });
+      }
+
+      // Включение режима редактирования
+      function enableEditMode() {
+        document.body.classList.add('edit-mode');
+        document.querySelectorAll('.content-card[data-editable="true"]').forEach(card => {
+          card.setAttribute('contenteditable', 'true');
+        });
+      }
+
+      // Выключение режима редактирования
+      function disableEditMode() {
+        document.body.classList.remove('edit-mode');
+        document.querySelectorAll('.content-card').forEach(card => {
+          card.removeAttribute('contenteditable');
+        });
+      }
+
+      // Сохранение изменений
+      SAVE_CHANGES.addEventListener('click', saveToFirebase);
+
+      // Переключение режима редактирования
+      TOGGLE_EDIT.addEventListener('click', () => {
+        if (isEditMode) {
+          disableEditMode();
+          isEditMode = false;
+          TOGGLE_EDIT.textContent = 'Редактировать';
+        } else {
+          enableEditMode();
+          isEditMode = true;
+          TOGGLE_EDIT.textContent = 'Просмотр';
+        }
+      });
+
+      // Вход
+      function login(code) {
+        const role = ACCESS_CODES[code];
+        if (!role) {
+          LOGIN_ERROR.style.display = 'block';
+          return false;
+        }
+        currentRole = role;
+        LOGIN_OVERLAY.classList.add('hidden');
+        ROLE_BADGE.textContent = role === 'admin' ? 'Руководитель' : 'Преподаватель';
+        ROLE_BADGE.className = 'role-badge' + (role === 'admin' ? ' admin' : '');
+        if (role === 'admin') {
+          EDIT_TOOLBAR.classList.add('visible');
+        } else {
+          EDIT_TOOLBAR.classList.remove('visible');
+        }
+        LOGIN_ERROR.style.display = 'none';
+        showPage('home');
+        return true;
+      }
+
+      LOGIN_BTN.addEventListener('click', () => {
+        login(LOGIN_INPUT.value);
+      });
+
+      LOGIN_INPUT.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') login(LOGIN_INPUT.value);
+      });
+
+      // Выход
+      LOGOUT_BTN.addEventListener('click', () => {
+        currentRole = null;
+        isEditMode = false;
+        disableEditMode();
+        LOGIN_OVERLAY.classList.remove('hidden');
+        LOGIN_INPUT.value = '';
+        TOGGLE_EDIT.textContent = 'Редактировать';
+      });
+
+      // Обработка кликов по меню
+      SIDEBAR.addEventListener('click', (e) => {
+        const btn = e.target.closest('.menu-item');
+        if (btn) showPage(btn.dataset.page);
+      });
+
+      // Инициализация — показываем экран входа сразу
+      LOGIN_OVERLAY.classList.remove('hidden');
+    })();
+  </script>
+</body>
+</html>
